@@ -35,7 +35,6 @@ export default function AdminDashboard() {
     const data = await res.json();
     setStudents(data);
   };
-
   const fetchGroups = async () => {
     const res = await fetch('/api/groups', {
       headers: { Authorization: `Bearer ${token}` }
@@ -43,7 +42,6 @@ export default function AdminDashboard() {
     const data = await res.json();
     setGroups(data);
   };
-
   useEffect(() => {
     fetchStudents();
     fetchGroups();
@@ -121,8 +119,7 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <BrainCircuit className="w-6 h-6 text-emerald-400" />
-              <span className="font-bold tracking-tighter text-xl">INTELLIGROUP</span>
+              <span className="font-bold tracking-tighter text-xl">Group Formation</span>
             </div>
             
             <div className="hidden md:flex items-center gap-1">
@@ -148,7 +145,7 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right mr-4">
-              <p className="text-[10px] uppercase tracking-widest text-white/40">Admin Control Panel</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/40">Admin</p>
               <p className="text-xs font-bold">{user?.name}</p>
             </div>
             <button 
@@ -235,6 +232,7 @@ export default function AdminDashboard() {
                     <th className="p-4">Email (Login ID)</th>
                     <th className="p-4">Dept</th>
                     <th className="p-4">CGPA</th>
+                    <th className="p-4">Marks</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Tier</th>
                     <th className="p-4">Group</th>
@@ -248,6 +246,7 @@ export default function AdminDashboard() {
                       <td className="p-4 text-[#141414]/60">{s.email}</td>
                       <td className="p-4 font-mono">{s.department}</td>
                       <td className="p-4 font-mono">{s.cgpa}</td>
+                      <td className="p-4 font-mono font-bold text-blue-600">{s.testScore}/40</td>
                       <td className="p-4">
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase ${
                           s.testStatus === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
@@ -291,7 +290,6 @@ export default function AdminDashboard() {
               </table>
             </motion.div>
           )}
-
           {activeTab === 'add' && (
             <motion.div 
               key="add"

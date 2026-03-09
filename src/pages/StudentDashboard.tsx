@@ -130,7 +130,7 @@ export default function StudentDashboard() {
                     <CheckCircle2 className="text-emerald-400 w-5 h-5" />
                     <div>
                       <p className="text-sm font-bold">Test Completed</p>
-                      <p className="text-[10px] text-white/40 uppercase">Score: {profile.testScore} pts</p>
+                      <p className="text-[10px] text-white/40 uppercase">Score: {profile.testScore}/40 marks</p>
                     </div>
                   </div>
                 </div>

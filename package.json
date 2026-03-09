@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "backup-db": "copy database.db database.backup.db && echo Database backed up successfully"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -27,7 +28,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
     "tailwind-merge": "^3.5.0",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vm2": "^3.10.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

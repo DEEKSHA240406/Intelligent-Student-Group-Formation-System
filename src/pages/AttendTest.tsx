@@ -24,7 +24,9 @@ export default function AttendTest() {
   const [currentStep, setCurrentStep] = useState<'intro' | 'mcq' | 'coding' | 'submitting'>('intro');
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [codingAnswer, setCodingAnswer] = useState('');
+  const [currentCodingIdx, setCurrentCodingIdx] = useState(0);
+  const [codingAnswers, setCodingAnswers] = useState<Record<number, string>>({});
+  const [testResults, setTestResults] = useState<Record<number, any>>({});
   const [timeLeft, setTimeLeft] = useState(15); // 15s for MCQ
   const [codingTimeLeft, setCodingTimeLeft] = useState(900); // 15m for coding
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,6 +97,25 @@ export default function AttendTest() {
     }
   };
 
+  const runTestCases = async (code: string, testCases: any[]) => {
+    try {
+      const response = await fetch('/api/run-test-cases', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ code, testCases })
+      });
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.log('Test execution failed:', error);
+      return { success: false, passedCount: 0, totalCount: testCases.length, score: 0, results: [] };
+    }
+  };
+
   const submitFinalScore = async (forcedScore?: number) => {
     setCurrentStep('submitting');
     let score = forcedScore ?? 0;
@@ -104,8 +125,16 @@ export default function AttendTest() {
       test.content.mcqs.forEach((q: any, idx: number) => {
         if (answers[idx] === q.correctAnswer) score += q.marks;
       });
-      // Mock coding score evaluation (in real app, use a sandbox)
-      if (codingAnswer.length > 20) score += 10; 
+      
+      // Calculate coding score
+      for (let idx = 0; idx < test.content.coding.length; idx++) {
+        const codingQ = test.content.coding[idx];
+        const code = codingAnswers[idx] || '';
+        if (code.trim()) {
+          const testResult = await runTestCases(code, codingQ.testCases);
+          score += testResult.score; // 2 for all pass, 1 for 2+ pass, 0 for less
+        }
+      }
     }
 
     await fetch('/api/student/submit-test', {
@@ -288,7 +317,7 @@ export default function AttendTest() {
                   <div className="w-10 h-10 bg-[#141414] text-white flex items-center justify-center shrink-0 font-bold">02</div>
                   <div>
                     <p className="font-bold uppercase text-sm">Coding Section</p>
-                    <p className="text-sm text-[#141414]/60">15 minutes to solve a problem. Evaluated against test cases.</p>
+                    <p className="text-sm text-[#141414]/60">15 minutes to solve 2 programming problems. Evaluated against test cases.</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
@@ -340,50 +369,176 @@ export default function AttendTest() {
           )}
 
           {currentStep === 'coding' && (
-            <motion.div 
+            <motion.div
               key="coding"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 h-[70vh]"
+              className="w-full max-w-7xl mx-auto"
             >
-              <div className="bg-white text-[#141414] p-8 overflow-y-auto shadow-[8px_8px_0px_0px_rgba(16,185,129,1)]">
-                <div className="flex items-center gap-2 mb-4 text-[#141414]/40">
-                  <Terminal className="w-4 h-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Problem Statement</span>
-                </div>
-                <h2 className="text-2xl font-bold mb-6">{test.content.coding[0].question}</h2>
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase text-[#141414]/40 mb-2">Test Cases</h3>
-                    {test.content.coding[0].testCases.map((tc: any, i: number) => (
-                      <div key={i} className="bg-[#F5F5F5] p-3 border border-[#141414]/10 mb-2 font-mono text-xs">
-                        <p><span className="text-[#141414]/40">Input:</span> {tc.input}</p>
-                        <p><span className="text-[#141414]/40">Expected:</span> {tc.expectedOutput}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Navigation buttons at top right */}
+              <div className="flex justify-end mb-4 gap-2">
+                {currentCodingIdx > 0 && (
+                  <button
+                    onClick={() => setCurrentCodingIdx(prev => prev - 1)}
+                    className="px-4 py-2 bg-gray-600 text-white hover:bg-gray-700 transition-colors rounded"
+                  >
+                    Previous Problem
+                  </button>
+                )}
+                {currentCodingIdx < test.content.coding.length - 1 ? (
+                  <button
+                    onClick={() => setCurrentCodingIdx(prev => prev + 1)}
+                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded"
+                  >
+                    Next Problem
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => submitFinalScore()}
+                    className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 transition-colors rounded"
+                  >
+                    Submit Assessment
+                  </button>
+                )}
               </div>
 
-              <div className="flex flex-col gap-4">
-                <div className="flex-1 bg-[#0A0A0A] border border-white/10 p-4 font-mono relative">
-                  <div className="absolute top-4 right-4 flex items-center gap-2 text-[10px] text-white/40 uppercase">
-                    <Code2 className="w-3 h-3" />
-                    JavaScript
+              {/* LeetCode-style layout - Code Editor on Left, Problem on Right */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 min-h-[80vh]">
+                {/* Code Editor - Left Side (Full Height) */}
+                <div className="bg-gray-900 min-h-[80vh] flex flex-col">
+                  {/* Editor Header */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
+                    <div className="flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-300">Solution</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">JavaScript</span>
+                      <button
+                        onClick={async () => {
+                          const code = codingAnswers[currentCodingIdx] || '';
+                          if (!code.trim()) return;
+
+                          const result = await runTestCases(code, test.content.coding[currentCodingIdx].testCases);
+                          setTestResults(prev => ({ ...prev, [currentCodingIdx]: result }));
+                        }}
+                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+                      >
+                        Run Code
+                      </button>
+                    </div>
                   </div>
-                  <textarea
-                    className="w-full h-full bg-transparent outline-none resize-none text-emerald-400 leading-relaxed"
-                    placeholder="// Write your code here..."
-                    value={codingAnswer}
-                    onChange={e => setCodingAnswer(e.target.value)}
-                  />
+
+                  {/* Code Editor - Full Height */}
+                  <div className="flex-1 relative">
+                    <textarea
+                      className="w-full h-full bg-gray-900 text-green-400 font-mono text-sm leading-6 p-4 outline-none resize-none border-0 focus:ring-0"
+                      placeholder={`// ${currentCodingIdx === 0 ? 'Add two numbers and print the sum' : 'Subtract two numbers and print the result'}\n// Example:\n// let a = prompt("Enter first number");\n// let b = prompt("Enter second number");\n// let result = ${currentCodingIdx === 0 ? 'a + b' : 'a - b'};\n// console.log(result);`}
+                      value={codingAnswers[currentCodingIdx] || ''}
+                      onChange={e => setCodingAnswers({ ...codingAnswers, [currentCodingIdx]: e.target.value })}
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                    />
+                  </div>
                 </div>
-                <button 
-                  onClick={() => submitFinalScore()}
-                  className="bg-emerald-500 text-[#141414] py-4 font-bold uppercase tracking-widest hover:bg-emerald-400 transition-colors"
-                >
-                  Submit Assessment
-                </button>
+
+                {/* Problem Description and Test Cases - Right Side */}
+                <div className="bg-white border-l border-gray-200 flex flex-col min-h-[80vh]">
+                  {/* Problem Header */}
+                  <div className="p-6 border-b border-gray-200 bg-gray-50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                        {currentCodingIdx + 1}
+                      </div>
+                      <h2 className="text-xl font-semibold text-gray-900">{test.content.coding[currentCodingIdx].question}</h2>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">Easy</span>
+                      <span>Accepted Rate: 85%</span>
+                    </div>
+                  </div>
+
+                  {/* Problem Description */}
+                  <div className="flex-1 p-6 overflow-y-auto">
+                    <div className="prose prose-sm max-w-none mb-6">
+                      <p className="text-gray-700 mb-6">
+                        {currentCodingIdx === 0
+                          ? 'Write a program that gets two values from users, adds them, stores the result in a third variable, and prints the value of the sum.'
+                          : 'Write a program that gets two values from users, subtracts them, stores the result in a third variable, and prints the value of the sum.'
+                        }
+                      </p>
+
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Examples</h3>
+                      {test.content.coding[currentCodingIdx].testCases.slice(0, 2).map((tc: any, i: number) => (
+                        <div key={i} className="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-sm">
+                          <div className="text-gray-600 mb-2">Example {i + 1}:</div>
+                          <div><span className="text-blue-600">Input:</span> {tc.input.replace('\n', ', ')}</div>
+                          <div><span className="text-blue-600">Output:</span> {tc.expectedOutput}</div>
+                        </div>
+                      ))}
+
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Note</h3>
+                      <p className="text-gray-700 text-sm">
+                        Use <code>prompt()</code> to get input from users and <code>console.log()</code> to print the result.
+                      </p>
+                    </div>
+
+                    {/* Test Cases and Results */}
+                    <div className="border-t border-gray-200 pt-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Test Cases</h3>
+
+                      {testResults[currentCodingIdx] ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm font-medium text-gray-700">
+                                {testResults[currentCodingIdx].passedCount} / {testResults[currentCodingIdx].totalCount} test cases passed
+                              </span>
+                              <span className="text-sm font-medium text-blue-600">
+                                Score: {testResults[currentCodingIdx].score} marks
+                              </span>
+                            </div>
+                          </div>
+
+                          {testResults[currentCodingIdx].results.map((result: any, i: number) => (
+                            <div key={i} className={`p-3 rounded-lg border ${result.passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`w-4 h-4 rounded-full ${result.passed ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                <span className="text-sm font-medium">Test Case {i + 1}</span>
+                                <span className={`text-xs px-2 py-1 rounded ${result.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {result.passed ? 'PASS' : 'FAIL'}
+                                </span>
+                              </div>
+                              <div className="text-xs font-mono text-gray-600 space-y-1">
+                                <div><span className="text-gray-500">Input:</span> {result.input}</div>
+                                <div><span className="text-gray-500">Expected:</span> {result.expected}</div>
+                                <div><span className="text-gray-500">Output:</span> {result.actual}</div>
+                                {result.error && <div className="text-red-600">Error: {result.error}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {test.content.coding[currentCodingIdx].testCases.map((tc: any, i: number) => (
+                            <div key={i} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="w-4 h-4 rounded-full bg-gray-300"></span>
+                                <span className="text-sm font-medium">Test Case {i + 1}</span>
+                              </div>
+                              <div className="text-xs font-mono text-gray-600 space-y-1">
+                                <div><span className="text-gray-500">Input:</span> {tc.input}</div>
+                                <div><span className="text-gray-500">Expected:</span> {tc.expectedOutput}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
