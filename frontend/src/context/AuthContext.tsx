@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: 'admin' | 'student';
@@ -11,7 +11,7 @@ interface User {
   testScore?: number;
   tier?: string;
   testStatus?: string;
-  groupId?: number;
+  groupId?: string;
 }
 
 interface AuthContextType {

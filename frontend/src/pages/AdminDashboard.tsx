@@ -13,7 +13,8 @@ import {
   BarChart3,
   Edit2,
   X,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
     name: '', email: '', password: 'password123', cgpa: '', department: '', gender: 'Male'
   });
   const [editingStudent, setEditingStudent] = useState<any>(null);
+  const [groupSize, setGroupSize] = useState(4);
 
   const fetchStudents = async () => {
     const res = await fetch('/api/admin/students', {
@@ -92,12 +94,31 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteStudent = async (studentId: number) => {
+    if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) return;
+    const res = await fetch(`/api/admin/students/${studentId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      fetchStudents();
+      fetchGroups();
+      alert('Student deleted successfully!');
+    } else {
+      alert('Failed to delete student');
+    }
+  };
+
   const generateGroups = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/generate-groups', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ groupSize })
       });
       if (res.ok) {
         setActiveTab('groups');
@@ -174,14 +195,27 @@ export default function AdminDashboard() {
             </p>
           </div>
           {activeTab === 'students' && (
-            <button 
-              onClick={generateGroups}
-              disabled={loading}
-              className="bg-[#141414] text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading ? 'Processing...' : 'Generate Groups'}
-              <BrainCircuit className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-[#141414]">Group Size:</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="10"
+                  value={groupSize}
+                  onChange={(e) => setGroupSize(parseInt(e.target.value) || 4)}
+                  className="w-16 px-2 py-1 border border-[#141414] bg-white text-center font-bold"
+                />
+              </div>
+              <button 
+                onClick={generateGroups}
+                disabled={loading}
+                className="bg-[#141414] text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading ? 'Processing...' : 'Generate Groups'}
+                <BrainCircuit className="w-4 h-4" />
+              </button>
+            </div>
           )}
         </header>
 
@@ -282,6 +316,13 @@ export default function AdminDashboard() {
                               <RefreshCw className="w-4 h-4" />
                             </button>
                           )}
+                          <button 
+                            onClick={() => handleDeleteStudent(s.id)}
+                            className="p-2 hover:bg-red-600 hover:text-white transition-colors text-red-600"
+                            title="Delete Student"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
