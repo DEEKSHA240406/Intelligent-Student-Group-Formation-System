@@ -4,6 +4,7 @@ import random
 import subprocess
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from time import perf_counter
 from typing import Any, Dict, List, Optional
 
 import bcrypt
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pymongo import MongoClient
+from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
 
 load_dotenv()
 
@@ -525,14 +527,30 @@ async def submit_test(body: Dict[str, Any], authorization: Optional[str] = Heade
 @app.post("/api/admin/generate-groups")
 async def generate_groups(body: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_admin_user)):
     group_size = int(body.get("groupSize", 4))
+    method = str(body.get("method", "genetic")).lower()
     student_docs = list(users.find({"role": "student"}))
     if len(student_docs) < 2:
         raise HTTPException(status_code=400, detail="Not enough students to form groups")
-    grouped = run_grouping(student_docs, group_size)
+
+    if method == "random":
+        grouped = random_grouping(student_docs, group_size)
+        method_used = "random"
+        extra_metrics = metrics_for_groups(grouped)
+    elif method == "round_robin" or method == "round-robin":
+        grouped = round_robin_grouping(student_docs, group_size)
+        method_used = "round_robin"
+        extra_metrics = metrics_for_groups(grouped)
+    else:
+        grouped, genetics = genetic_grouping(student_docs, group_size)
+        method_used = "genetic"
+        extra_metrics = metrics_for_groups(grouped)
+        extra_metrics.update(genetics)
+
     groups.delete_many({})
     users.update_many({"role": "student"}, {"$set": {"groupId": None}})
+
     for idx, members in enumerate(grouped, start=1):
-        avg_cgpa = sum(float(m.get("cgpa") or 0) for m in members) / len(members)
+        avg_cgpa = sum(float(m.get("cgpa") or 0) for m in members) / len(members) if members else 0
         group_doc = {
             "groupNumber": idx,
             "members": [m["_id"] for m in members],
@@ -546,7 +564,82 @@ async def generate_groups(body: Dict[str, Any], current_user: Dict[str, Any] = D
         }
         gid = groups.insert_one(group_doc).inserted_id
         users.update_many({"_id": {"$in": group_doc["members"]}}, {"$set": {"groupId": gid}})
-    return await get_groups(authorization=f"Bearer {create_token(current_user)}")
+
+    output = await get_groups(authorization=f"Bearer {create_token(current_user)}")
+    return {"method": method_used, "groups": output, "metrics": extra_metrics}
+
+
+@app.post("/api/admin/compare-grouping")
+async def compare_grouping(body: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_admin_user)):
+    group_size = int(body.get("groupSize", 4))
+    student_docs = list(users.find({"role": "student"}))
+    if len(student_docs) < 2:
+        raise HTTPException(status_code=400, detail="Not enough students to compare")
+
+    report = []
+    for method_name in ["random", "round_robin", "genetic"]:
+        start = perf_counter()
+        if method_name == "random":
+            grouped = random_grouping(student_docs, group_size)
+            method_metrics = metrics_for_groups(grouped)
+        elif method_name == "round_robin":
+            grouped = round_robin_grouping(student_docs, group_size)
+            method_metrics = metrics_for_groups(grouped)
+        else:
+            grouped, genetics = genetic_grouping(student_docs, group_size)
+            method_metrics = metrics_for_groups(grouped)
+            method_metrics.update(genetics)
+        elapsed = perf_counter() - start
+        method_metrics["durationSeconds"] = elapsed
+
+        report.append({
+            "method": method_name,
+            "stats": method_metrics,
+            "groups": [
+                {
+                    "groupNumber": idx + 1,
+                    "students": [s["name"] for s in group],
+                    "tierCounts": {
+                        "Excellent": sum(1 for s in group if s.get("tier") == "Excellent"),
+                        "Good": sum(1 for s in group if s.get("tier") == "Good"),
+                        "Low": sum(1 for s in group if s.get("tier") == "Low"),
+                    },
+                    "avgCgpa": sum(float(s.get("cgpa") or 0) for s in group) / max(1, len(group)),
+                }
+                for idx, group in enumerate(grouped)
+            ],
+        })
+
+    return {"comparisons": report}
+
+
+@app.post("/api/admin/improve-groups")
+async def improve_groups(body: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_admin_user)):
+    group_size = int(body.get("groupSize", 4))
+    extra_generations = int(body.get("extraGenerations", 50))
+    student_docs = list(users.find({"role": "student"}))
+    if len(student_docs) < 2:
+        raise HTTPException(status_code=400, detail="Not enough students to improve groups")
+
+    current_group_docs = list(groups.find().sort("groupNumber", 1))
+    baseline_groups = [
+        list(users.find({"_id": {"$in": g.get("members", [])}})) for g in current_group_docs
+    ]
+    baseline_metrics = metrics_for_groups(baseline_groups)
+
+    optimized_groups, genetics = genetic_grouping(student_docs, group_size, generations=extra_generations)
+    optimized_metrics = metrics_for_groups(optimized_groups)
+    optimized_metrics.update(genetics)
+
+    return {
+        "baseline": {"metrics": baseline_metrics, "groupCount": len(baseline_groups)},
+        "optimized": {"metrics": optimized_metrics, "groupCount": len(optimized_groups)},
+        "differences": {
+            "totalFitnessDelta": optimized_metrics["totalFitness"] - baseline_metrics["totalFitness"]
+            if baseline_metrics and "totalFitness" in baseline_metrics
+            else None
+        },
+    }
 
 
 @app.get("/api/groups")

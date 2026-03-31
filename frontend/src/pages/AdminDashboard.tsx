@@ -17,6 +17,15 @@ import {
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 
 export default function AdminDashboard() {
   const { user, logout, token } = useAuth();
@@ -24,6 +33,9 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [compareData, setCompareData] = useState<any>(null);
+  const [improveData, setImproveData] = useState<any>(null);
+  const [algorithm, setAlgorithm] = useState('genetic');
   const [newStudent, setNewStudent] = useState({
     name: '', email: '', password: 'password123', cgpa: '', department: '', gender: 'Male'
   });
@@ -109,21 +121,70 @@ export default function AdminDashboard() {
     }
   };
 
+  const compareAlgorithms = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/compare-grouping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ groupSize }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCompareData(data);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to compare algorithms');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const improveGroups = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/improve-groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ groupSize, extraGenerations: 80 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setImproveData(data);
+        await fetchGroups();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to improve groups');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const generateGroups = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/generate-groups', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ groupSize })
+        body: JSON.stringify({ groupSize, method: algorithm }),
       });
       if (res.ok) {
         setActiveTab('groups');
         await fetchStudents();
         await fetchGroups();
+        setCompareData(null);
+        setImproveData(null);
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to generate groups');
@@ -194,8 +255,8 @@ export default function AdminDashboard() {
               Welcome back, {user?.name}
             </p>
           </div>
-          {activeTab === 'students' && (
-            <div className="flex items-center gap-4">
+          {(activeTab === 'students' || activeTab === 'groups') && (
+            <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <label className="text-sm font-bold uppercase tracking-widest text-[#141414]">Group Size:</label>
                 <input
@@ -207,6 +268,18 @@ export default function AdminDashboard() {
                   className="w-16 px-2 py-1 border border-[#141414] bg-white text-center font-bold"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-[#141414]">Method:</label>
+                <select
+                  value={algorithm}
+                  onChange={(e) => setAlgorithm(e.target.value)}
+                  className="px-2 py-1 border border-[#141414] bg-white"
+                >
+                  <option value="genetic">Genetic</option>
+                  <option value="round_robin">Round Robin</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
               <button 
                 onClick={generateGroups}
                 disabled={loading}
@@ -215,6 +288,25 @@ export default function AdminDashboard() {
                 {loading ? 'Processing...' : 'Generate Groups'}
                 <BrainCircuit className="w-4 h-4" />
               </button>
+
+              {activeTab === 'groups' && (
+                <>
+                  <button
+                    onClick={compareAlgorithms}
+                    disabled={loading}
+                    className="bg-blue-600 text-white px-4 py-2 font-bold uppercase tracking-widest hover:bg-blue-500 transition-colors disabled:opacity-50"
+                  >
+                    Compare Methods
+                  </button>
+                  <button
+                    onClick={improveGroups}
+                    disabled={loading}
+                    className="bg-green-600 text-white px-4 py-2 font-bold uppercase tracking-widest hover:bg-green-500 transition-colors disabled:opacity-50"
+                  >
+                    Improve Groups
+                  </button>
+                </>
+              )}
             </div>
           )}
         </header>
@@ -427,7 +519,7 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Overall AI Fitness</p>
                     <p className="text-3xl font-bold font-mono">
-                      {groups.length > 0 ? (groups.reduce((acc, g) => acc + g.fairnessScore, 0) / groups.length).toFixed(1) : '0.0'}
+                      {groups.length > 0 ? (groups.reduce((acc, g) => acc + (g.fairnessScore ?? 0), 0) / groups.length).toFixed(1) : '0.0'}
                     </p>
                   </div>
                   <div>
@@ -443,8 +535,43 @@ export default function AdminDashboard() {
                     <p className="text-3xl font-bold font-mono text-purple-400">OPTIMIZED</p>
                   </div>
                 </div>
-              </div>
 
+                {compareData && compareData.comparisons && (
+                  <div className="mt-8 bg-white text-black p-6 rounded-lg">
+                    <h4 className="text-lg font-bold mb-4">Method Comparison ⏱</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {(compareData.comparisons || []).map((comparison: any) => (
+                        <div key={comparison.method} className="p-4 border border-slate-300 rounded-lg">
+                          <h5 className="font-bold uppercase mb-2">{comparison.method.replace('_', ' ')}</h5>
+                          <p className="text-sm">Avg Fitness: {comparison.stats.averageFitness?.toFixed(1) ?? 'N/A'}</p>
+                          <p className="text-sm">Total Fitness: {comparison.stats.totalFitness?.toFixed(1) ?? 'N/A'}</p>
+                          <p className="text-sm">Dur: {comparison.stats.durationSeconds?.toFixed(2)}s</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6 h-40">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={(compareData.comparisons || []).map((c:any)=>({method:c.method, avg:c.stats.averageFitness ??0}))}>
+                          <XAxis dataKey="method" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="avg" fill="#0f766e" name="Avg Fitness" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {improveData && (
+                  <div className="mt-8 bg-white text-black p-6 rounded-lg">
+                    <h4 className="text-lg font-bold mb-4">Improvement Summary 💡</h4>
+                    <p className="text-sm">Before Total Fitness: {improveData.baseline.metrics.totalFitness?.toFixed(1)}</p>
+                    <p className="text-sm">After Total Fitness: {improveData.optimized.metrics.totalFitness?.toFixed(1)}</p>
+                    <p className="text-sm">Delta: {improveData.differences.totalFitnessDelta?.toFixed(1)}</p>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {groups.map((group) => (
                 <div key={group.id} className="bg-white border border-[#141414] p-6 shadow-[4px_4px_0px_0px_rgba(20,20,20,1)]">
