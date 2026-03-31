@@ -136,46 +136,162 @@ try {
 def calculate_group_fitness(group_members: List[Dict[str, Any]]) -> float:
     if not group_members:
         return 0.0
+    # CGPA balance (higher is better with low within-group variance)
     cgpas = [float(m.get("cgpa") or 0) for m in group_members]
     avg = sum(cgpas) / len(cgpas)
     variance = sum((x - avg) ** 2 for x in cgpas) / len(cgpas)
-    cgpa_score = 1 / (variance + 0.1)
+    cgpa_score = 1.0 / (variance + 0.1)
+
+    # Tier balance: require all three tiers, penalize dominance
     excellent = sum(1 for m in group_members if m.get("tier") == "Excellent")
     good = sum(1 for m in group_members if m.get("tier") == "Good")
     low = sum(1 for m in group_members if m.get("tier") == "Low")
-    tier_score = 0
-    tier_score += 15 if excellent >= 1 else -10
-    tier_score += 10 if good >= 1 else -5
-    tier_score += 10 if low >= 1 else -5
-    if max(excellent, good, low) > len(group_members) / 2:
-        tier_score -= 20
+    tier_score = 0.0
+    tier_score += 8.0 if excellent >= 1 else -8.0
+    tier_score += 8.0 if good >= 1 else -8.0
+    tier_score += 8.0 if low >= 1 else -8.0
+    if max(excellent, good, low) > max(1, len(group_members) / 2):
+        tier_score -= 10.0
+
+    # Diversity: department and gender
     genders = len(set((m.get("gender") or "Unknown") for m in group_members))
     departments = len(set((m.get("department") or "Unknown") for m in group_members))
-    diversity_score = genders * 5 + departments * 5
-    return (cgpa_score * 10) + tier_score + diversity_score
+    diversity_score = genders * 5.0 + departments * 5.0
+
+    return cgpa_score * 10.0 + tier_score + diversity_score
+
+
+def _groups_from_chromosome(chromosome: List[List[int]], students_data: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    return [[students_data[i] for i in grp] for grp in chromosome]
+
+
+def _chromosome_fitness(chromosome: List[List[int]], students_data: List[Dict[str, Any]], target_sizes: List[int]) -> float:
+    total = 0.0
+    group_means = []
+    size_penalty = 0.0
+
+    for idx, group in enumerate(chromosome):
+        members = [students_data[i] for i in group]
+        if not members:
+            size_penalty -= 20.0
+            continue
+
+        # group member weights
+        total += calculate_group_fitness(members)
+
+        cgpas = [float(m.get("cgpa") or 0) for m in members]
+        group_means.append(sum(cgpas) / len(cgpas))
+
+        # equal size enforcement
+        size_gap = abs(len(group) - target_sizes[idx])
+        size_penalty -= size_gap * 15.0
+
+    # between-group CGPA mean variance and penalties for imbalance
+    if len(group_means) > 1:
+        mean_of_means = sum(group_means) / len(group_means)
+        mean_variance = sum((x - mean_of_means) ** 2 for x in group_means) / len(group_means)
+        total += 50.0 / (mean_variance + 1.0)
+    else:
+        total += 5.0
+
+    total += size_penalty
+    return total
+
+
+def _make_random_chromosome(num_students: int, target_sizes: List[int]) -> List[List[int]]:
+    ids = list(range(num_students))
+    random.shuffle(ids)
+    chromosome: List[List[int]] = []
+    idx = 0
+    for size in target_sizes:
+        chromosome.append(ids[idx : idx + size])
+        idx += size
+    return chromosome
+
+
+def _crossover(parent1: List[List[int]], parent2: List[List[int]], target_sizes: List[int]) -> List[List[int]]:
+    num_groups = len(parent1)
+    chosen = set(random.sample(range(num_groups), k=max(1, num_groups // 2)))
+    child: List[List[int]] = [list(parent1[g]) if g in chosen else [] for g in range(num_groups)]
+    assigned = {student for g in chosen for student in parent1[g]}
+    remaining = [student for group in parent2 for student in group if student not in assigned]
+
+    for g in range(num_groups):
+        if g in chosen:
+            continue
+        size = target_sizes[g]
+        child[g] = remaining[:size]
+        assigned.update(child[g])
+        remaining = remaining[size:]
+
+    # Fill any empty buckets if rounding issues happen
+    for g in range(num_groups):
+        while len(child[g]) < target_sizes[g] and remaining:
+            child[g].append(remaining.pop(0))
+    return child
+
+
+def _mutate(chromosome: List[List[int]]) -> None:
+    num_groups = len(chromosome)
+    if num_groups < 2:
+        return
+    g1, g2 = random.sample(range(num_groups), 2)
+    if not chromosome[g1] or not chromosome[g2]:
+        return
+    i1 = random.randrange(len(chromosome[g1]))
+    i2 = random.randrange(len(chromosome[g2]))
+    chromosome[g1][i1], chromosome[g2][i2] = chromosome[g2][i2], chromosome[g1][i1]
 
 
 def run_grouping(students_data: List[Dict[str, Any]], group_size: int) -> List[List[Dict[str, Any]]]:
-    # Lightweight equivalent of previous balancing strategy.
-    students_copy = students_data[:]
-    random.shuffle(students_copy)
-    num_groups = max(1, (len(students_copy) + group_size - 1) // group_size)
-    groups_out = [[] for _ in range(num_groups)]
-    for i, student in enumerate(students_copy):
-        groups_out[i % num_groups].append(student)
-    # Improve by local swaps.
-    for _ in range(120):
-        g1, g2 = random.sample(range(num_groups), 2)
-        if not groups_out[g1] or not groups_out[g2]:
-            continue
-        i1 = random.randrange(len(groups_out[g1]))
-        i2 = random.randrange(len(groups_out[g2]))
-        before = calculate_group_fitness(groups_out[g1]) + calculate_group_fitness(groups_out[g2])
-        groups_out[g1][i1], groups_out[g2][i2] = groups_out[g2][i2], groups_out[g1][i1]
-        after = calculate_group_fitness(groups_out[g1]) + calculate_group_fitness(groups_out[g2])
-        if after < before:
-            groups_out[g1][i1], groups_out[g2][i2] = groups_out[g2][i2], groups_out[g1][i1]
-    return groups_out
+    n_students = len(students_data)
+    if n_students == 0:
+        return []
+    if group_size <= 0:
+        group_size = max(1, n_students)
+
+    num_groups = max(1, (n_students + group_size - 1) // group_size)
+    base_size = n_students // num_groups
+    overflow = n_students % num_groups
+    target_sizes = [base_size + (1 if i < overflow else 0) for i in range(num_groups)]
+
+    # GA parameters
+    population_size = 60
+    generations = 120
+    mutation_rate = 0.25
+    elitism = 0.1
+
+    population = [_make_random_chromosome(n_students, target_sizes) for _ in range(population_size)]
+
+    for _ in range(generations):
+        scored = [(chrom, _chromosome_fitness(chrom, students_data, target_sizes)) for chrom in population]
+        scored.sort(key=lambda item: item[1], reverse=True)
+        elite_count = max(2, int(population_size * elitism))
+        next_gen = [chrom for chrom, _ in scored[:elite_count]]
+
+        while len(next_gen) < population_size:
+            parent1 = random.choice(scored[: population_size // 2])[0]
+            parent2 = random.choice(scored[: population_size // 2])[0]
+            child = _crossover(parent1, parent2, target_sizes)
+            if random.random() < mutation_rate:
+                _mutate(child)
+            next_gen.append(child)
+
+        population = next_gen
+
+    best_chromosome = max(population, key=lambda c: _chromosome_fitness(c, students_data, target_sizes))
+    optimized_groups = _groups_from_chromosome(best_chromosome, students_data)
+
+    # fallback: if GA fails to produce a valid solution, do simple initial grouping
+    if any(abs(len(g) - target_sizes[i]) > 1 for i, g in enumerate(optimized_groups)):
+        students_copy = students_data[:]
+        random.shuffle(students_copy)
+        groups_out = [[] for _ in range(num_groups)]
+        for i, student in enumerate(students_copy):
+            groups_out[i % num_groups].append(student)
+        return groups_out
+
+    return optimized_groups
 
 
 def seed_defaults() -> None:
