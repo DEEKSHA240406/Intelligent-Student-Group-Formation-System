@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-  User, 
-  BookOpen, 
   Users, 
   LogOut, 
-  Trophy, 
-  Calendar, 
-  ChevronRight,
-  Clock,
-  AlertCircle,
-  CheckCircle2
+  BookOpen,
+  Zap,
+  Mail,
+  GraduationCap,
+  BarChart3
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
@@ -22,19 +19,29 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
 
   const fetchProfile = async () => {
-    const res = await fetch('/api/student/profile', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setProfile(data);
-    
-    if (data.groupId) {
-      const gRes = await fetch('/api/groups', {
+    try {
+      const res = await fetch('/api/student/profile', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const groups = await gRes.json();
-      const myGroup = groups.find((g: any) => g.id === data.groupId);
-      setGroup(myGroup);
+      if (!res.ok) {
+        console.error('Failed to fetch profile:', res.status);
+        return;
+      }
+      const data = await res.json();
+      setProfile(data);
+      
+      if (data.groupId) {
+        const gRes = await fetch('/api/groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (gRes.ok) {
+          const groups = await gRes.json();
+          const myGroup = groups.find((g: any) => g.id === data.groupId);
+          setGroup(myGroup);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
     }
   };
 
@@ -44,178 +51,219 @@ export default function StudentDashboard() {
 
   if (!profile) return null;
 
+  const testStatus = profile.testStatus === 'Completed';
+  const testScore = profile.testScore || 0;
+
   return (
-    <div className="min-h-screen bg-[#E4E3E0] font-sans flex flex-col">
-      {/* Top Navbar */}
-      <nav className="bg-[#141414] text-white sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Top Navigation */}
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <Trophy className="w-6 h-6 text-emerald-400" />
-              <span className="font-bold tracking-tighter text-xl">STUDENT PORTAL</span>
+              <div className="bg-linear-to-br from-accent-purple to-accent-pink rounded-lg p-2">
+                <Users className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-bold tracking-wide text-gray-900">STUDENT PORTAL</span>
             </div>
             
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1 border-l border-gray-100 pl-8">
               <button
                 onClick={() => navigate('/student')}
-                className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all bg-white text-[#141414]"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wide text-accent-purple rounded-lg hover:bg-primary-50 transition-colors"
               >
-                <User className="w-3 h-3" />
+                <BarChart3 className="w-4 h-4" />
                 Dashboard
               </button>
               <button
                 onClick={() => navigate('/student/test')}
-                className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all hover:bg-white/10"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wide text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <BookOpen className="w-3 h-3" />
+                <Zap className="w-4 h-4" />
                 Skill Test
               </button>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 mr-4 border-r border-white/10 pr-4">
-              <div className="w-8 h-8 bg-emerald-400 text-[#141414] flex items-center justify-center font-bold text-xs">
+            <div className="hidden sm:flex items-center gap-3 border-r border-gray-100 pr-4">
+              <div className="w-9 h-9 bg-linear-to-br from-accent-purple to-accent-pink text-white flex items-center justify-center font-bold text-sm rounded-full">
                 {profile.name.charAt(0)}
               </div>
-              <div className="text-right">
-                <p className="text-xs font-bold">{profile.name}</p>
-                <p className="text-[8px] uppercase tracking-widest text-white/40">ID: #{profile.id}</p>
+              <div className="text-right text-xs">
+                <p className="font-semibold text-gray-900">{profile.name}</p>
+                <p className="text-gray-500">ID #{profile.id}</p>
               </div>
             </div>
             <button 
               onClick={logout}
-              className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:text-red-400 transition-colors border border-white/10"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold tracking-wide text-gray-600 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
             >
-              <LogOut className="w-3 h-3" />
+              <LogOut className="w-4 h-4" />
               Logout
             </button>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-8 w-full flex-1">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Stats & Profile */}
-          <div className="space-y-8">
-            <section className="bg-white border border-[#141414] p-6 shadow-[4px_4px_0px_0px_rgba(20,20,20,1)]">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-[#141414]/40 mb-6 border-b border-[#141414]/10 pb-2">Academic Profile</h2>
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Sidebar - Profile & Status */}
+          <div className="space-y-4">
+            {/* Academic Profile Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-lg border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <h3 className="text-xs font-bold tracking-wide text-gray-500 mb-4 uppercase">Academic Profile</h3>
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-[#141414]/60">CGPA</span>
-                  <span className="font-mono font-bold text-lg">{profile.cgpa}</span>
+                <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">CGPA</span>
+                  <span className="font-bold text-lg text-accent-purple">{profile.cgpa}</span>
+                </div>
+                <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                  <span className="text-sm text-gray-600">Department</span>
+                  <span className="text-sm font-semibold text-gray-900">{profile.department}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-[#141414]/60">Gender</span>
-                  <span className="font-bold">{profile.gender}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-[#141414]/60">Tier Status</span>
-                  <span className={`px-2 py-1 text-[10px] font-bold uppercase ${
-                    profile.tier === 'Excellent' ? 'bg-purple-100 text-purple-700' : 
-                    profile.tier === 'Good' ? 'bg-blue-100 text-blue-700' : 
-                    profile.tier === 'Low' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-700'
-                  }`}>
-                    {profile.tier}
-                  </span>
+                  <span className="text-sm text-gray-600">Gender</span>
+                  <span className="text-sm font-semibold text-gray-900">{profile.gender}</span>
                 </div>
               </div>
-            </section>
+            </motion.div>
 
-            <section className="bg-[#141414] text-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
-              <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-6 border-b border-white/10 pb-2">Skill Assessment</h2>
-              {profile.testStatus === 'Completed' ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="text-emerald-400 w-5 h-5" />
-                    <div>
-                      <p className="text-sm font-bold">Test Completed</p>
-                      <p className="text-[10px] text-white/40 uppercase">Score: {profile.testScore}/40 marks</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="text-amber-400 w-5 h-5" />
-                    <div>
-                      <p className="text-sm font-bold">Test Pending</p>
-                      <p className="text-[10px] text-white/40 uppercase">Action Required</p>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-white/60 italic">Please navigate to the "Skill Test" page from the top navbar to begin your assessment.</p>
-                </div>
+            {/* Performance Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className={`rounded-lg border p-6 shadow-sm text-white ${
+                profile.tier === 'Excellent' ? 'bg-linear-to-br from-green-500 to-emerald-600 border-green-600' :
+                profile.tier === 'Good' ? 'bg-linear-to-br from-blue-500 to-cyan-600 border-blue-600' :
+                profile.tier === 'Low' ? 'bg-linear-to-br from-orange-500 to-red-600 border-orange-600' :
+                'bg-linear-to-br from-purple-500 to-pink-600 border-purple-600'
+              }`}
+            >
+              <p className="text-xs font-bold tracking-wide mb-2 opacity-90">PERFORMANCE TIER</p>
+              <p className="text-2xl font-bold">{profile.tier}</p>
+            </motion.div>
+
+            {/* Test Status */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-lg border border-gray-100 p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-3 h-3 rounded-full ${testStatus ? 'bg-green-500' : 'bg-orange-500'}`} />
+                <p className="text-xs font-bold tracking-wide text-gray-500 uppercase">Skill Test</p>
+              </div>
+              <p className={`font-bold text-lg ${testStatus ? 'text-green-600' : 'text-orange-600'}`}>
+                {testStatus ? 'Completed' : 'Pending'}
+              </p>
+              {testStatus && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Score: <span className="font-bold text-accent-purple">{testScore}/40</span>
+                </p>
               )}
-            </section>
+              {!testStatus && (
+                <button
+                  onClick={() => navigate('/student/test')}
+                className="mt-4 w-full bg-linear-to-r from-accent-purple to-accent-pink text-white text-xs font-bold py-2 rounded-lg hover:shadow-lg transition-shadow"
+                >
+                  Start Test Now
+                </button>
+              )}
+            </motion.div>
           </div>
 
-          {/* Right Column: Group Info */}
-          <div className="lg:col-span-2">
-            <section className="bg-white border border-[#141414] p-8 shadow-[8px_8px_0px_0px_rgba(20,20,20,1)] h-full">
-              <div className="flex justify-between items-center mb-8 border-b border-[#141414] pb-4">
-                <div>
-                  <h2 className="text-2xl font-bold uppercase tracking-tighter">Your Collaborative Group</h2>
-                  <p className="text-xs italic font-serif text-[#141414]/60">AI-Optimized Team Formation</p>
-                </div>
-                {group && (
-                  <div className="bg-[#141414] text-white px-4 py-2 text-xl font-bold font-mono">
-                    #{group.groupNumber}
-                  </div>
-                )}
-              </div>
-
-              {group ? (
-                <div className="space-y-8">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-[#F5F5F5] p-4 border border-[#141414]/10">
-                      <p className="text-[8px] uppercase font-bold text-[#141414]/40 mb-1">Avg CGPA</p>
-                      <p className="text-xl font-bold font-mono">{group.avgCgpa.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-[#F5F5F5] p-4 border border-[#141414]/10">
-                      <p className="text-[8px] uppercase font-bold text-[#141414]/40 mb-1">Fairness Score</p>
-                      <p className="text-xl font-bold font-mono">{group.fairnessScore.toFixed(0)}</p>
-                    </div>
-                    <div className="bg-[#F5F5F5] p-4 border border-[#141414]/10">
-                      <p className="text-[8px] uppercase font-bold text-[#141414]/40 mb-1">Members</p>
-                      <p className="text-xl font-bold font-mono">4</p>
-                    </div>
-                  </div>
-
+          {/* Right Content - Group Info */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="lg:col-span-2 bg-white rounded-lg border border-gray-100 p-8 shadow-sm"
+          >
+            {group ? (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-6 border-b border-gray-100">
                   <div>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#141414]/40 mb-4">Team Members</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {group.members.map((member: any) => (
-                        <div key={member.id} className={`p-4 border border-[#141414]/10 flex items-center gap-3 ${member.id === profile.id ? 'bg-emerald-50 border-emerald-200' : 'bg-[#F5F5F5]'}`}>
-                          <div className="w-8 h-8 bg-[#141414] text-white flex items-center justify-center text-[10px] font-bold">
+                    <h2 className="text-2xl font-bold text-gray-900">Group #{group.groupNumber}</h2>
+                    <p className="text-sm text-gray-500">Your AI-optimized collaborative team</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 mb-1">GROUP STATS</p>
+                    <p className="text-2xl font-bold text-accent-purple">{group.members?.length || 4}</p>
+                    <p className="text-xs text-gray-500">Members</p>
+                  </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-linear-to-br from-primary-50 to-primary-100 rounded-lg p-4 border border-primary-200">
+                    <p className="text-xs text-gray-600 font-bold mb-1">AVG CGPA</p>
+                    <p className="text-xl font-bold text-accent-purple">{group.avgCgpa?.toFixed(2) || '0.00'}</p>
+                  </div>
+                  <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                    <p className="text-xs text-gray-600 font-bold mb-1">FAIRNESS</p>
+                    <p className="text-xl font-bold text-blue-600">{group.fairnessScore?.toFixed(0) || '0'}</p>
+                  </div>
+                  <div className="bg-linear-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200">
+                    <p className="text-xs text-gray-600 font-bold mb-1">DIVERSITY</p>
+                    <p className="text-xl font-bold text-emerald-600">{group.diversityScore?.toFixed(0) || '0'}</p>
+                  </div>
+                </div>
+
+                {/* Team Members */}
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide text-gray-700 mb-4">TEAM MEMBERS</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {group.members?.map((member: any) => (
+                      <div 
+                        key={member.id} 
+                        className={`p-4 rounded-lg border transition-all ${
+                          member.id === profile.id 
+                            ? 'bg-primary-50 border-accent-purple' 
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm ${
+                            member.id === profile.id
+                              ? 'bg-linear-to-br from-accent-purple to-accent-pink'
+                              : 'bg-gray-300'
+                          }`}>
                             {member.name.charAt(0)}
                           </div>
-                          <div>
-                            <p className="text-sm font-bold">{member.name} {member.id === profile.id && '(You)'}</p>
-                            <p className="text-[10px] uppercase text-[#141414]/40">{member.department} • {member.tier}</p>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {member.name} {member.id === profile.id && <span className="text-accent-pink">(You)</span>}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              <span className="font-medium">{member.department}</span> • <span>{member.tier}</span>
+                            </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-8 border-t border-[#141414]/10">
-                    <div className="flex items-center gap-2 text-emerald-600">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest">Optimized for Diversity & Performance</span>
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <Users className="w-16 h-16 text-[#141414]/10 mb-4" />
-                  <h3 className="text-lg font-bold uppercase tracking-tight mb-2">Group Formation in Progress</h3>
-                  <p className="text-sm text-[#141414]/60 max-w-md mx-auto">
-                    The AI is currently analyzing all student assessments to create the most balanced and fair groups possible. You will be notified once your group is assigned.
-                  </p>
-                </div>
-              )}
-            </section>
-          </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-gray-900 mb-2">No Group Assigned Yet</h3>
+                <p className="text-gray-600">
+                  Groups will be formed once all students complete the skill test.
+                </p>
+              </div>
+            )}
+          </motion.div>
         </div>
       </main>
     </div>

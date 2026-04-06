@@ -4,15 +4,17 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Timer, 
   AlertTriangle, 
-  ChevronRight, 
   CheckCircle2, 
-  Code2, 
-  Brain,
-  Terminal,
-  Trophy,
-  User,
-  BookOpen,
-  LogOut
+  Code2,
+  LogOut,
+  Zap,
+  BarChart3,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,35 +28,49 @@ export default function AttendTest() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [currentCodingIdx, setCurrentCodingIdx] = useState(0);
   const [codingAnswers, setCodingAnswers] = useState<Record<number, string>>({});
-  const [testResults, setTestResults] = useState<Record<number, any>>({});
-  const [timeLeft, setTimeLeft] = useState(15); // 15s for MCQ
-  const [codingTimeLeft, setCodingTimeLeft] = useState(900); // 15m for coding
+  const [timeLeft, setTimeLeft] = useState(15);
+  const [codingTimeLeft, setCodingTimeLeft] = useState(900);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const res = await fetch('/api/student/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setProfile(data);
+      try {
+        const res = await fetch('/api/student/profile', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile(data);
+        } else {
+          console.error('Failed to fetch profile:', res.status);
+        }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+      }
     };
     fetchProfile();
 
     const fetchTest = async () => {
-      const res = await fetch('/api/admin/test', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setTest(data);
+      try {
+        const res = await fetch('/api/admin/test', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTest(data);
+        } else {
+          console.error('Failed to fetch test:', res.status);
+        }
+      } catch (err) {
+        console.error('Error fetching test:', err);
+      }
     };
     fetchTest();
 
-    // Tab switching detection
     const handleVisibilityChange = () => {
       if (document.hidden && currentStep !== 'intro' && currentStep !== 'submitting') {
-        alert('Tab switching detected! Test will be auto-submitted.');
-        submitFinalScore(0); // Penalty
+        alert('Tab switching detected! Test will be submitted.');
+        submitFinalScore(0);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -97,126 +113,77 @@ export default function AttendTest() {
     }
   };
 
-  const runTestCases = async (code: string, testCases: any[]) => {
+  const submitFinalScore = async (forcedScore?: number) => {
+    setCurrentStep('submitting');
+    let score = forcedScore ?? 0;
+    
+    if (forcedScore === undefined && test) {
+      test.content.mcqs.forEach((q: any, idx: number) => {
+        if (answers[idx] === q.correctAnswer) score += q.marks;
+      });
+    }
+
     try {
-      const response = await fetch('/api/run-test-cases', {
+      const res = await fetch('/api/student/submit-test', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ code, testCases })
+        body: JSON.stringify({ score }),
       });
-      
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.log('Test execution failed:', error);
-      return { success: false, passedCount: 0, totalCount: testCases.length, score: 0, results: [] };
-    }
-  };
-
-  const submitFinalScore = async (forcedScore?: number) => {
-    setCurrentStep('submitting');
-    let score = forcedScore ?? 0;
-    
-    if (forcedScore === undefined) {
-      // Calculate MCQ score
-      test.content.mcqs.forEach((q: any, idx: number) => {
-        if (answers[idx] === q.correctAnswer) score += q.marks;
-      });
-      
-      // Calculate coding score
-      for (let idx = 0; idx < test.content.coding.length; idx++) {
-        const codingQ = test.content.coding[idx];
-        const code = codingAnswers[idx] || '';
-        if (code.trim()) {
-          const testResult = await runTestCases(code, codingQ.testCases);
-          score += testResult.score; // 2 for all pass, 1 for 2+ pass, 0 for less
-        }
+      if (!res.ok) {
+        console.error('Failed to submit test:', res.status);
       }
+    } catch (err) {
+      console.error('Error submitting test:', err);
+    } finally {
+      navigate('/student');
     }
-
-    await fetch('/api/student/submit-test', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ score }),
-    });
-    navigate('/student');
   };
 
   if (!test || !profile) return null;
 
   if (profile.testStatus === 'Completed') {
     return (
-      <div className="min-h-screen bg-[#141414] text-white font-sans flex flex-col">
-        {/* Top Navbar */}
-        <nav className="bg-[#141414] border-b border-white/10 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Top Navigation */}
+        <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-2">
-                <Trophy className="w-6 h-6 text-emerald-400" />
-                <span className="font-bold tracking-tighter text-xl">STUDENT PORTAL</span>
-              </div>
-              
-              <div className="hidden md:flex items-center gap-1">
-                <button
-                  onClick={() => navigate('/student')}
-                  className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all hover:bg-white/10"
-                >
-                  <User className="w-3 h-3" />
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => navigate('/student/test')}
-                  className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all bg-white text-[#141414]"
-                >
-                  <BookOpen className="w-3 h-3" />
-                  Skill Test
-                </button>
+                <div className="bg-linear-to-br from-accent-purple to-accent-pink rounded-lg p-2">
+                  <Zap className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xs font-bold tracking-wide text-gray-900">SKILL TEST</span>
               </div>
             </div>
-
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-3 mr-4 border-r border-white/10 pr-4">
-                <div className="w-8 h-8 bg-emerald-400 text-[#141414] flex items-center justify-center font-bold text-xs">
-                  {user?.name?.charAt(0)}
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold">{user?.name}</p>
-                  <p className="text-[8px] uppercase tracking-widest text-white/40">ID: #{user?.id}</p>
-                </div>
-              </div>
-              <button 
-                onClick={logout}
-                className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:text-red-400 transition-colors border border-white/10"
-              >
-                <LogOut className="w-3 h-3" />
-                Logout
-              </button>
-            </div>
+            <button 
+              onClick={logout}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold tracking-wide text-gray-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
           </div>
         </nav>
 
         <main className="flex-1 flex items-center justify-center p-8">
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-md w-full bg-white text-[#141414] p-12 shadow-[12px_12px_0px_0px_rgba(16,185,129,1)] text-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-md w-full bg-white rounded-lg border border-gray-100 p-8 text-center shadow-sm"
           >
-            <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle className="w-10 h-10" />
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h2 className="text-3xl font-bold uppercase tracking-tighter mb-4">Test Completed</h2>
-            <p className="text-sm text-[#141414]/60 mb-8 leading-relaxed">
-              You have already completed your assessment. To retake the test, please contact your administrator for permission.
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">Test Completed</h2>
+            <p className="text-gray-600 mb-6">
+              You have already completed your assessment. Contact your administrator to retake the test.
             </p>
             <button 
               onClick={() => navigate('/student')}
-              className="w-full bg-[#141414] text-white py-4 font-bold uppercase tracking-widest hover:bg-emerald-600 transition-colors"
+              className="w-full bg-linear-to-r from-accent-purple to-accent-pink text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all"
             >
               Back to Dashboard
             </button>
@@ -226,337 +193,236 @@ export default function AttendTest() {
     );
   }
 
+  const mcqProgress = ((currentQuestionIdx) / test.content.mcqs.length) * 100;
+
   return (
-    <div className="min-h-screen bg-[#141414] text-white font-sans flex flex-col">
-      {/* Top Navbar */}
-      <nav className="bg-[#141414] border-b border-white/10 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Top Navigation */}
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <Trophy className="w-6 h-6 text-emerald-400" />
-              <span className="font-bold tracking-tighter text-xl">STUDENT PORTAL</span>
-            </div>
-            
-            <div className="hidden md:flex items-center gap-1">
-              <button
-                onClick={() => navigate('/student')}
-                className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all hover:bg-white/10"
-              >
-                <User className="w-3 h-3" />
-                Dashboard
-              </button>
-              <button
-                onClick={() => navigate('/student/test')}
-                className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all bg-white text-[#141414]"
-              >
-                <BookOpen className="w-3 h-3" />
-                Skill Test
-              </button>
+              <div className="bg-linear-to-br from-accent-purple to-accent-pink rounded-lg p-2">
+                <Code2 className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-bold tracking-wide text-gray-900">SKILL ASSESSMENT</span>
             </div>
           </div>
-
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 mr-4 border-r border-white/10 pr-4">
-              <div className="w-8 h-8 bg-emerald-400 text-[#141414] flex items-center justify-center font-bold text-xs">
-                {user?.name?.charAt(0)}
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold">{user?.name}</p>
-                <p className="text-[8px] uppercase tracking-widest text-white/40">ID: #{user?.id}</p>
-              </div>
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold text-sm ${
+              currentStep === 'coding' && codingTimeLeft < 120
+                ? 'bg-red-100 text-red-700'
+                : 'bg-primary-50 text-accent-purple'
+            }`}>
+              <Timer className="w-4 h-4" />
+              <span>
+                {currentStep === 'mcq' ? `${timeLeft}s` : `${Math.floor(codingTimeLeft / 60)}:${String(codingTimeLeft % 60).padStart(2, '0')}`}
+              </span>
             </div>
             <button 
               onClick={logout}
-              className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:text-red-400 transition-colors border border-white/10"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold tracking-wide text-gray-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
             >
-              <LogOut className="w-3 h-3" />
-              Logout
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Test Header */}
-      <header className="border-b border-white/10 p-4 flex justify-between items-center bg-[#141414]">
-        <div className="flex items-center gap-3">
-          <Brain className="text-emerald-400 w-6 h-6" />
-          <h1 className="text-lg font-bold uppercase tracking-tighter">Skill Assessment Engine</h1>
-        </div>
-        {(currentStep === 'mcq' || currentStep === 'coding') && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 border border-white/10">
-              <Timer className={`w-4 h-4 ${timeLeft < 5 ? 'text-red-400 animate-pulse' : 'text-white/60'}`} />
-              <span className="font-mono font-bold text-xl">
-                {currentStep === 'mcq' ? timeLeft : `${Math.floor(codingTimeLeft / 60)}:${(codingTimeLeft % 60).toString().padStart(2, '0')}`}
-              </span>
+      {currentStep === 'intro' && (
+        <motion.main
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex-1 flex items-center justify-center p-8"
+        >
+          <div className="max-w-2xl w-full bg-white rounded-lg border border-gray-100 p-8 shadow-sm">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Skill Assessment Test</h1>
+              <p className="text-gray-600">Evaluate your coding and problem-solving abilities</p>
             </div>
+
+            <div className="space-y-6 mb-8">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-blue-900 mb-2">📝 MCQ Round</h3>
+                <p className="text-blue-800 text-sm">
+                  {test.content.mcqs.length} questions • 15 seconds per question • {test.content.mcqs.reduce((acc: number, q: any) => acc + q.marks, 0)} total marks
+                </p>
+              </div>
+
+              <div className="bg-linear-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-purple-900 mb-2">💻 Coding Round</h3>
+                <p className="text-purple-800 text-sm">
+                  {test.content.coding.length} problems • 15 minutes total • Score based on test cases
+                </p>
+              </div>
+
+              <div className="bg-linear-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-amber-900 mb-2">⚠️ Important Rules</h3>
+                <ul className="text-amber-800 text-sm space-y-1">
+                  <li>• Tab switching will auto-submit your test</li>
+                  <li>• You cannot go back to previous questions</li>
+                  <li>• Answers are auto-saved</li>
+                </ul>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setCurrentStep('mcq')}
+              className="w-full bg-linear-to-r from-accent-purple to-accent-pink text-white py-3 rounded-lg font-bold hover:shadow-lg transition-all"
+            >
+              Start Test
+            </button>
           </div>
-        )}
-      </header>
+        </motion.main>
+      )}
 
-      <main className="flex-1 flex items-center justify-center p-8">
-        <AnimatePresence mode="wait">
-          {currentStep === 'intro' && (
-            <motion.div 
-              key="intro"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="max-w-2xl w-full bg-white text-[#141414] p-12 shadow-[12px_12px_0px_0px_rgba(16,185,129,1)]"
-            >
-              <h2 className="text-4xl font-bold uppercase tracking-tighter mb-6">Ready to begin?</h2>
-              <div className="space-y-6 mb-10">
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 bg-[#141414] text-white flex items-center justify-center shrink-0 font-bold">01</div>
-                  <div>
-                    <p className="font-bold uppercase text-sm">MCQ Section</p>
-                    <p className="text-sm text-[#141414]/60">15 seconds per question. No backward navigation allowed.</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 bg-[#141414] text-white flex items-center justify-center shrink-0 font-bold">02</div>
-                  <div>
-                    <p className="font-bold uppercase text-sm">Coding Section</p>
-                    <p className="text-sm text-[#141414]/60">15 minutes to solve 2 programming problems. Evaluated against test cases.</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 bg-red-500 text-white flex items-center justify-center shrink-0 font-bold">!!</div>
-                  <div>
-                    <p className="font-bold uppercase text-sm text-red-600">Anti-Cheat Active</p>
-                    <p className="text-sm text-[#141414]/60">Switching tabs or minimizing window will result in immediate disqualification.</p>
-                  </div>
-                </div>
+      {currentStep === 'mcq' && test.content.mcqs[currentQuestionIdx] && (
+        <motion.main
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex-1 max-w-4xl mx-auto w-full px-6 py-8"
+        >
+          <div className="bg-white rounded-lg border border-gray-100 p-8 shadow-sm">
+            {/* Progress Bar */}
+            <div className="mb-8">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm font-semibold text-gray-700">Question {currentQuestionIdx + 1} of {test.content.mcqs.length}</p>
+                <p className="text-sm font-semibold text-accent-purple">{test.content.mcqs[currentQuestionIdx].marks} points</p>
               </div>
-              <button 
-                onClick={() => setCurrentStep('mcq')}
-                className="w-full bg-[#141414] text-white py-5 font-bold uppercase tracking-widest hover:bg-emerald-600 transition-colors flex items-center justify-center gap-3"
-              >
-                Initialize Test Environment
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </motion.div>
-          )}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-linear-to-r from-accent-purple to-accent-pink h-2 rounded-full transition-all"
+                  style={{ width: `${mcqProgress}%` }}
+                />
+              </div>
+            </div>
 
-          {currentStep === 'mcq' && (
-            <motion.div 
-              key="mcq"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              className="max-w-3xl w-full"
-            >
-              <div className="mb-8">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Question {currentQuestionIdx + 1} of {test.content.mcqs.length}</span>
-                <h2 className="text-3xl font-bold mt-2">{test.content.mcqs[currentQuestionIdx].question}</h2>
-              </div>
-              <div className="grid grid-cols-1 gap-4">
-                {test.content.mcqs[currentQuestionIdx].options.map((option: string) => (
-                  <button
-                    key={option}
-                    onClick={() => {
-                      setAnswers({ ...answers, [currentQuestionIdx]: option });
-                      handleNextQuestion();
-                    }}
-                    className="group bg-white/5 border border-white/10 p-6 text-left hover:bg-white hover:text-[#141414] transition-all flex justify-between items-center"
+            {/* Question */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                {test.content.mcqs[currentQuestionIdx].question}
+              </h2>
+
+              <div className="space-y-3">
+                {test.content.mcqs[currentQuestionIdx].options.map((option: string, idx: number) => (
+                  <label
+                    key={idx}
+                    className={`flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      answers[currentQuestionIdx] === option
+                        ? 'border-accent-purple bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
                   >
-                    <span className="font-bold">{option}</span>
-                    <ChevronRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
+                    <input
+                      type="radio"
+                      name="option"
+                      value={option}
+                      checked={answers[currentQuestionIdx] === option}
+                      onChange={(e) => setAnswers({...answers, [currentQuestionIdx]: e.target.value})}
+                      className="w-5 h-5"
+                    />
+                    <span className="ml-4 font-medium text-gray-900">{option}</span>
+                  </label>
                 ))}
               </div>
-            </motion.div>
-          )}
+            </div>
 
-          {currentStep === 'coding' && (
-            <motion.div
-              key="coding"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="w-full max-w-7xl mx-auto"
-            >
-              {/* Navigation buttons at top right */}
-              <div className="flex justify-end mb-4 gap-2">
-                {currentCodingIdx > 0 && (
-                  <button
-                    onClick={() => setCurrentCodingIdx(prev => prev - 1)}
-                    className="px-4 py-2 bg-gray-600 text-white hover:bg-gray-700 transition-colors rounded"
-                  >
-                    Previous Problem
-                  </button>
-                )}
-                {currentCodingIdx < test.content.coding.length - 1 ? (
-                  <button
-                    onClick={() => setCurrentCodingIdx(prev => prev + 1)}
-                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded"
-                  >
-                    Next Problem
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => submitFinalScore()}
-                    className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 transition-colors rounded"
-                  >
-                    Submit Assessment
-                  </button>
+            {/* Navigation */}
+            <div className="flex justify-end gap-3 pt-8 border-t border-gray-100">
+              <button
+                onClick={handleNextQuestion}
+                className="bg-linear-to-r from-accent-purple to-accent-pink text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all"
+              >
+                {currentQuestionIdx === test.content.mcqs.length - 1 ? 'Next Section' : 'Next Question'}
+              </button>
+            </div>
+          </div>
+        </motion.main>
+      )}
+
+      {currentStep === 'coding' && (
+        <motion.main
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex-1 max-w-6xl mx-auto w-full px-6 py-8"
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Problem Statement */}
+            <div className="bg-white rounded-lg border border-gray-100 p-6 shadow-sm overflow-y-auto max-h-[calc(100vh-100px)]">
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-xl font-bold text-gray-900">Problem {currentCodingIdx + 1}</h2>
+                  <span className="text-xs font-bold bg-primary-50 text-accent-purple px-3 py-1 rounded-full">
+                    {currentCodingIdx + 1} of {test.content.coding.length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-bold text-gray-900 mb-2">{test.content.coding[currentCodingIdx].title}</h3>
+                  <p className="text-gray-600 text-sm">{test.content.coding[currentCodingIdx].description}</p>
+                </div>
+
+                {test.content.coding[currentCodingIdx].examples && (
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <p className="font-semibold text-gray-900 mb-2">Example:</p>
+                    <pre className="text-xs text-gray-700 overflow-x-auto">
+                      {test.content.coding[currentCodingIdx].examples}
+                    </pre>
+                  </div>
                 )}
               </div>
 
-              {/* LeetCode-style layout - Code Editor on Left, Problem on Right */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 min-h-[80vh]">
-                {/* Code Editor - Left Side (Full Height) */}
-                <div className="bg-gray-900 min-h-[80vh] flex flex-col">
-                  {/* Editor Header */}
-                  <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
-                    <div className="flex items-center gap-2">
-                      <Code2 className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-300">Solution</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">JavaScript</span>
-                      <button
-                        onClick={async () => {
-                          const code = codingAnswers[currentCodingIdx] || '';
-                          if (!code.trim()) return;
-
-                          const result = await runTestCases(code, test.content.coding[currentCodingIdx].testCases);
-                          setTestResults(prev => ({ ...prev, [currentCodingIdx]: result }));
-                        }}
-                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
-                      >
-                        Run Code
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Code Editor - Full Height */}
-                  <div className="flex-1 relative">
-                    <textarea
-                      className="w-full h-full bg-gray-900 text-green-400 font-mono text-sm leading-6 p-4 outline-none resize-none border-0 focus:ring-0"
-                      placeholder={`// ${currentCodingIdx === 0 ? 'Add two numbers and print the sum' : 'Subtract two numbers and print the result'}\n// Example:\n// let a = prompt("Enter first number");\n// let b = prompt("Enter second number");\n// let result = ${currentCodingIdx === 0 ? 'a + b' : 'a - b'};\n// console.log(result);`}
-                      value={codingAnswers[currentCodingIdx] || ''}
-                      onChange={e => setCodingAnswers({ ...codingAnswers, [currentCodingIdx]: e.target.value })}
-                      spellCheck={false}
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                    />
-                  </div>
-                </div>
-
-                {/* Problem Description and Test Cases - Right Side */}
-                <div className="bg-white border-l border-gray-200 flex flex-col min-h-[80vh]">
-                  {/* Problem Header */}
-                  <div className="p-6 border-b border-gray-200 bg-gray-50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                        {currentCodingIdx + 1}
-                      </div>
-                      <h2 className="text-xl font-semibold text-gray-900">{test.content.coding[currentCodingIdx].question}</h2>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">Easy</span>
-                      <span>Accepted Rate: 85%</span>
-                    </div>
-                  </div>
-
-                  {/* Problem Description */}
-                  <div className="flex-1 p-6 overflow-y-auto">
-                    <div className="prose prose-sm max-w-none mb-6">
-                      <p className="text-gray-700 mb-6">
-                        {currentCodingIdx === 0
-                          ? 'Write a program that gets two values from users, adds them, stores the result in a third variable, and prints the value of the sum.'
-                          : 'Write a program that gets two values from users, subtracts them, stores the result in a third variable, and prints the value of the sum.'
-                        }
-                      </p>
-
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Examples</h3>
-                      {test.content.coding[currentCodingIdx].testCases.slice(0, 2).map((tc: any, i: number) => (
-                        <div key={i} className="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-sm">
-                          <div className="text-gray-600 mb-2">Example {i + 1}:</div>
-                          <div><span className="text-blue-600">Input:</span> {tc.input.replace('\n', ', ')}</div>
-                          <div><span className="text-blue-600">Output:</span> {tc.expectedOutput}</div>
-                        </div>
-                      ))}
-
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Note</h3>
-                      <p className="text-gray-700 text-sm">
-                        Use <code>prompt()</code> to get input from users and <code>console.log()</code> to print the result.
-                      </p>
-                    </div>
-
-                    {/* Test Cases and Results */}
-                    <div className="border-t border-gray-200 pt-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Test Cases</h3>
-
-                      {testResults[currentCodingIdx] ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm font-medium text-gray-700">
-                                {testResults[currentCodingIdx].passedCount} / {testResults[currentCodingIdx].totalCount} test cases passed
-                              </span>
-                              <span className="text-sm font-medium text-blue-600">
-                                Score: {testResults[currentCodingIdx].score} marks
-                              </span>
-                            </div>
-                          </div>
-
-                          {testResults[currentCodingIdx].results.map((result: any, i: number) => (
-                            <div key={i} className={`p-3 rounded-lg border ${result.passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className={`w-4 h-4 rounded-full ${result.passed ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                <span className="text-sm font-medium">Test Case {i + 1}</span>
-                                <span className={`text-xs px-2 py-1 rounded ${result.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {result.passed ? 'PASS' : 'FAIL'}
-                                </span>
-                              </div>
-                              <div className="text-xs font-mono text-gray-600 space-y-1">
-                                <div><span className="text-gray-500">Input:</span> {result.input}</div>
-                                <div><span className="text-gray-500">Expected:</span> {result.expected}</div>
-                                <div><span className="text-gray-500">Output:</span> {result.actual}</div>
-                                {result.error && <div className="text-red-600">Error: {result.error}</div>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {test.content.coding[currentCodingIdx].testCases.map((tc: any, i: number) => (
-                            <div key={i} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="w-4 h-4 rounded-full bg-gray-300"></span>
-                                <span className="text-sm font-medium">Test Case {i + 1}</span>
-                              </div>
-                              <div className="text-xs font-mono text-gray-600 space-y-1">
-                                <div><span className="text-gray-500">Input:</span> {tc.input}</div>
-                                <div><span className="text-gray-500">Expected:</span> {tc.expectedOutput}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-8 pt-8 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    if (currentCodingIdx < test.content.coding.length - 1) {
+                      setCurrentCodingIdx(prev => prev + 1);
+                    } else {
+                      submitFinalScore();
+                    }
+                  }}
+                  className="w-full bg-linear-to-r from-accent-purple to-accent-pink text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all"
+                >
+                  {currentCodingIdx === test.content.coding.length - 1 ? 'Submit Test' : 'Next Problem'}
+                </button>
               </div>
-            </motion.div>
-          )}
+            </div>
 
-          {currentStep === 'submitting' && (
-            <motion.div 
-              key="submitting"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center"
-            >
-              <div className="w-20 h-20 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-8"></div>
-              <h2 className="text-2xl font-bold uppercase tracking-tighter">Finalizing Assessment</h2>
-              <p className="text-white/40 italic font-serif mt-2">Calculating scores and determining tier classification...</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
+            {/* Code Editor */}
+            <div className="bg-white rounded-lg border border-gray-100 p-6 shadow-sm flex flex-col">
+              <h3 className="font-bold text-gray-900 mb-4">Write Your Code</h3>
+              <textarea
+                value={codingAnswers[currentCodingIdx] || ''}
+                onChange={(e) => setCodingAnswers({...codingAnswers, [currentCodingIdx]: e.target.value})}
+                placeholder="def solve():\n    pass"
+                className="flex-1 font-mono text-sm p-4 mb-4"
+              />
+              <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors flex items-center gap-2 justify-center">
+                <Play className="w-4 h-4" />
+                Run Code
+              </button>
+            </div>
+          </div>
+        </motion.main>
+      )}
+
+      {currentStep === 'submitting' && (
+        <motion.main
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex-1 flex items-center justify-center p-8"
+        >
+          <div className="text-center">
+            <div className="animate-spin mb-6">
+              <Zap className="w-12 h-12 text-accent-purple mx-auto" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitting Your Test</h2>
+            <p className="text-gray-600">Your responses are being evaluated...</p>
+          </div>
+        </motion.main>
+      )}
     </div>
   );
 }
