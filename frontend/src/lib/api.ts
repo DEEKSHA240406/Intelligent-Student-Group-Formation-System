@@ -7,7 +7,9 @@
  * In production (Vercel), VITE_API_URL must point to the Render backend,
  * e.g.  VITE_API_URL=https://your-backend.onrender.com
  */
-const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+const API_BASE = import.meta.env.PROD 
+  ? "https://mini-project-rgvq.onrender.com" 
+  : (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 
 /**
  * Build the full URL for an API endpoint.
