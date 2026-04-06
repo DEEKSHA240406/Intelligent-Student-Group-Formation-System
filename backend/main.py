@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import bcrypt
 import jwt
 from bson import ObjectId
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -18,7 +19,8 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
 
-load_dotenv()
+# Load .env from the backend directory
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-change-me")
@@ -35,9 +37,15 @@ groups = db["groups"]
 users.create_index("email", unique=True)
 
 app = FastAPI(title="Student Group Formation API")
+
+# Read allowed origins from environment variable (comma-separated).
+# Example: CORS_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+_cors_origins_env = os.getenv("CORS_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()] if _cors_origins_env else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

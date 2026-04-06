@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -42,14 +43,14 @@ export default function AdminDashboard() {
   const [groupSize, setGroupSize] = useState(4);
 
   const fetchStudents = async () => {
-    const res = await fetch('/api/admin/students', {
+    const res = await fetch(apiUrl('/api/admin/students'), {
       headers: { Authorization: `Bearer ${token}` }
     });
     const data = await res.json();
     setStudents(data);
   };
   const fetchGroups = async () => {
-    const res = await fetch('/api/groups', {
+    const res = await fetch(apiUrl('/api/groups'), {
       headers: { Authorization: `Bearer ${token}` }
     });
     const data = await res.json();
@@ -62,7 +63,7 @@ export default function AdminDashboard() {
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/admin/students', {
+    const res = await fetch(apiUrl('/api/admin/students'), {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -79,7 +80,7 @@ export default function AdminDashboard() {
 
   const handleUpdateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch(`/api/admin/students/${editingStudent.id}`, {
+    const res = await fetch(apiUrl(`/api/admin/students/${editingStudent.id}`), {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
@@ -95,7 +96,7 @@ export default function AdminDashboard() {
   };
 
   const handleAssignRetest = async (studentId: number) => {
-    const res = await fetch(`/api/admin/students/${studentId}/assign-retest`, {
+    const res = await fetch(apiUrl(`/api/admin/students/${studentId}/assign-retest`), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -107,7 +108,7 @@ export default function AdminDashboard() {
 
   const handleDeleteStudent = async (studentId: number) => {
     if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) return;
-    const res = await fetch(`/api/admin/students/${studentId}`, {
+    const res = await fetch(apiUrl(`/api/admin/students/${studentId}`), {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -123,7 +124,7 @@ export default function AdminDashboard() {
   const compareAlgorithms = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/compare-grouping', {
+      const res = await fetch(apiUrl('/api/admin/compare-grouping'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +147,7 @@ export default function AdminDashboard() {
   const generateGroups = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/generate-groups', {
+      const res = await fetch(apiUrl('/api/admin/generate-groups'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

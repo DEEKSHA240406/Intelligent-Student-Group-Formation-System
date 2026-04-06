@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Users, Eye, EyeOff } from 'lucide-react';
+import { apiUrl } from '../lib/api';
 import { motion } from 'motion/react';
 
 export default function Login() {
@@ -22,7 +23,7 @@ export default function Login() {
     
     try {
       if (isSignup) {
-        const res = await fetch('/api/auth/signup', {
+        const res = await fetch(apiUrl('/api/auth/signup'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, email, password }),
@@ -31,7 +32,7 @@ export default function Login() {
         
         if (res.ok) {
           // Auto-login after signup
-          const loginRes = await fetch('/api/auth/login', {
+          const loginRes = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
@@ -47,7 +48,7 @@ export default function Login() {
           setError(data.error || 'Signup failed');
         }
       } else {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(apiUrl('/api/auth/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),

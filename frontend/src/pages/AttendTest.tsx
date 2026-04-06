@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiUrl } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -35,7 +36,7 @@ export default function AttendTest() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch('/api/student/profile', {
+        const res = await fetch(apiUrl('/api/student/profile'), {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -52,7 +53,7 @@ export default function AttendTest() {
 
     const fetchTest = async () => {
       try {
-        const res = await fetch('/api/admin/test', {
+        const res = await fetch(apiUrl('/api/admin/test'), {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -124,7 +125,7 @@ export default function AttendTest() {
     }
 
     try {
-      const res = await fetch('/api/student/submit-test', {
+      const res = await fetch(apiUrl('/api/student/submit-test'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

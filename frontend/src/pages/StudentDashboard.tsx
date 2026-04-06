@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
@@ -20,7 +21,7 @@ export default function StudentDashboard() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch('/api/student/profile', {
+      const res = await fetch(apiUrl('/api/student/profile'), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -31,7 +32,7 @@ export default function StudentDashboard() {
       setProfile(data);
       
       if (data.groupId) {
-        const gRes = await fetch('/api/groups', {
+        const gRes = await fetch(apiUrl('/api/groups'), {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (gRes.ok) {
