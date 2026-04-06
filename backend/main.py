@@ -17,7 +17,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pymongo import MongoClient
-from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
+try:
+    from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
+except ModuleNotFoundError:
+    from grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
 
 # Load .env from the backend directory
 load_dotenv(Path(__file__).resolve().parent / ".env")
