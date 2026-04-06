@@ -356,7 +356,9 @@ export default function AdminDashboard() {
                           {s.tier}
                         </span>
                       </td>
-                      <td className="p-4 font-mono">#{s.groupId || 'N/A'}</td>
+                      <td className="p-4 font-mono">
+                        {s.groupId ? `Group #${groups.find(g => g.id === s.groupId)?.groupNumber || 'N/A'}` : 'N/A'}
+                      </td>
                       <td className="p-4">
                         <div className="flex gap-2">
                           <button 

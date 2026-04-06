@@ -92,7 +92,7 @@ export default function StudentDashboard() {
               </div>
               <div className="text-right text-xs">
                 <p className="font-semibold text-gray-900">{profile.name}</p>
-                <p className="text-gray-500">ID #{profile.id}</p>
+                <p className="text-gray-500">{profile.email}</p>
               </div>
             </div>
             <button 
