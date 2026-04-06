@@ -44,15 +44,20 @@ app = FastAPI(title="Student Group Formation API")
 # Read allowed origins from environment variable (comma-separated).
 # Example: CORS_ORIGINS=https://your-app.vercel.app,http://localhost:5173
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
-_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()] if _cors_origins_env else ["*"]
+_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()] if _cors_origins_env else [
+    "http://localhost:5173",
+    "https://mini-project-rouge-seven.vercel.app"
+]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.exception_handler(HTTPException)
