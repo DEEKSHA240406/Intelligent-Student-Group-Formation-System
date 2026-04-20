@@ -8,7 +8,7 @@
  * e.g.  VITE_API_URL=https://your-backend.onrender.com
  */
 const API_BASE = import.meta.env.PROD 
-  ? "https://mini-project-rgvq.onrender.com" 
+  ? "https://intelligent-student-group-formation.onrender.com" 
   : (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 
 /**
