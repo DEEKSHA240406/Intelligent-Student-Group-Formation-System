@@ -1,6 +1,12 @@
 import random
+from collections import Counter
 from math import log2
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from backend.domain_utils import normalize_domain
+except ModuleNotFoundError:
+    from domain_utils import normalize_domain
 
 Student = Dict[str, Any]
 
@@ -260,3 +266,232 @@ def metrics_for_groups(groups: List[List[Student]]) -> Dict[str, Any]:
         "averageFitness": total_fitness / len(groups) if groups else 0.0,
         "groupMetrics": detail,
     }
+
+
+CORE_DOMAINS = ["frontend", "backend", "database"]
+CORE_LEVELS = ["Strong", "Medium", "Low"]
+
+
+def _normalize_student(student: Student) -> Student:
+    domain = normalize_domain(student.get("domain") or student.get("department") or "")
+
+    level_value = str(student.get("level") or student.get("tier") or "").strip().lower()
+    if level_value in ("strong", "excellent"):
+        level = "Strong"
+    elif level_value in ("medium", "good"):
+        level = "Medium"
+    elif level_value in ("low", "weak", "poor"):
+        level = "Low"
+    else:
+        level = "Medium"
+
+    score_value = student.get("score")
+    if score_value is None:
+        score_value = student.get("testScore")
+    if score_value is None:
+        score_value = student.get("cgpa")
+    try:
+        score = float(score_value) if score_value is not None else 0.0
+    except Exception:
+        score = 0.0
+
+    return {
+        **student,
+        "domain": domain,
+        "level": level,
+        "score": score,
+        "student_id": student.get("student_id") or student.get("id") or student.get("_id"),
+    }
+
+
+def calculate_group_score(group: List[Student]) -> float:
+    return sum(float(student.get("score") or 0.0) for student in group)
+
+
+def print_groups(groups: List[List[Student]]) -> None:
+    for idx, group in enumerate(groups, start=1):
+        print(f"Group {idx} ({len(group)} members):")
+        for student in group:
+            print(
+                f"  - {student.get('student_id')} | {student.get('domain')} | {student.get('level')} | {student.get('score')}"
+            )
+        print("---")
+
+
+def _variance(values: List[float]) -> float:
+    if not values:
+        return 0.0
+    mean = sum(values) / len(values)
+    return sum((value - mean) ** 2 for value in values) / len(values)
+
+
+def _population_by_domain_and_level(students: List[Student]) -> Dict[str, Dict[str, List[Student]]]:
+    buckets = {domain: {level: [] for level in CORE_LEVELS} for domain in CORE_DOMAINS}
+    buckets["unknown"] = {level: [] for level in CORE_LEVELS}
+
+    for raw_student in students:
+        student = _normalize_student(raw_student)
+        domain = student["domain"] if student["domain"] in CORE_DOMAINS else "unknown"
+        buckets[domain][student["level"]].append(student)
+
+    for domain in buckets:
+        for level in CORE_LEVELS:
+            buckets[domain][level].sort(key=lambda s: s["score"], reverse=True)
+
+    return buckets
+
+
+def _pop_best_student(
+    buckets: Dict[str, Dict[str, List[Student]]],
+    target_domain: str,
+    level_order: List[str],
+) -> Optional[Student]:
+    if target_domain in buckets:
+        for level in level_order:
+            if buckets[target_domain][level]:
+                return buckets[target_domain][level].pop(0)
+    return None
+
+
+def _pop_best_alternative_student(
+    buckets: Dict[str, Dict[str, List[Student]]],
+    level_order: List[str],
+    exclude_domain: Optional[str] = None,
+) -> Optional[Student]:
+    for domain in CORE_DOMAINS + ["unknown"]:
+        if domain == exclude_domain:
+            continue
+        student = _pop_best_student(buckets, domain, level_order)
+        if student:
+            return student
+    return None
+
+
+def _group_penalty(group: List[Student]) -> float:
+    domain_counts = Counter(student["domain"] for student in group)
+    level_counts = Counter(student["level"] for student in group)
+    penalty = 0.0
+
+    for core_domain in CORE_DOMAINS:
+        if domain_counts[core_domain] == 0:
+            penalty += 20.0
+
+    penalty += max(0, level_counts["Low"] - 1) * 10.0
+
+    for count in domain_counts.values():
+        if count > 2:
+            penalty += (count - 2) * 5.0
+
+    penalty += max(0, 3 - level_counts["Strong"]) * 4.0
+    penalty += max(0, 2 - level_counts["Medium"]) * 2.0
+
+    return penalty
+
+
+def _grouping_fitness(groups: List[List[Student]]) -> float:
+    scores = [calculate_group_score(group) for group in groups]
+    variance = _variance(scores)
+    penalties = sum(_group_penalty(group) for group in groups)
+    return 1.0 / (variance + 1.0 + penalties * 0.1)
+
+
+def _build_base_groups(
+    buckets: Dict[str, Dict[str, List[Student]]],
+    group_count: int,
+    group_size: int,
+) -> List[List[Student]]:
+    groups: List[List[Student]] = [[] for _ in range(group_count)]
+
+    for group in groups:
+        for domain in CORE_DOMAINS:
+            student = _pop_best_student(buckets, domain, ["Strong", "Medium", "Low"])
+            if not student:
+                student = _pop_best_alternative_student(buckets, ["Strong", "Medium", "Low"], exclude_domain=domain)
+            if student:
+                group.append(student)
+
+    return groups
+
+
+def _flatten_bucket(buckets: Dict[str, Dict[str, List[Student]]], levels: List[str]) -> List[Student]:
+    flattened: List[Student] = []
+    for domain in CORE_DOMAINS + ["unknown"]:
+        for level in levels:
+            flattened.extend(buckets[domain][level])
+            buckets[domain][level] = []
+    return flattened
+
+
+def _fill_groups(
+    groups: List[List[Student]],
+    buckets: Dict[str, Dict[str, List[Student]]],
+    group_size: int,
+) -> List[List[Student]]:
+    medium_students = _flatten_bucket(buckets, ["Medium"])
+    low_students = _flatten_bucket(buckets, ["Low"])
+
+    remaining = medium_students + low_students
+    remaining.sort(key=lambda s: s["score"], reverse=True)
+
+    while remaining and any(len(group) < group_size for group in groups):
+        groups.sort(key=lambda g: calculate_group_score(g))
+        student = remaining.pop(0)
+        for group in groups:
+            if len(group) < group_size:
+                group.append(student)
+                break
+
+    return groups
+
+
+def _local_optimize_groups(groups: List[List[Student]], iterations: int = 120) -> List[List[Student]]:
+    best_groups = [group[:] for group in groups]
+    best_fitness = _grouping_fitness(best_groups)
+
+    for _ in range(iterations):
+        if len(best_groups) < 2:
+            break
+        i, j = random.sample(range(len(best_groups)), 2)
+        if not best_groups[i] or not best_groups[j]:
+            continue
+        student_i = random.choice(best_groups[i])
+        student_j = random.choice(best_groups[j])
+        if student_i["domain"] != student_j["domain"]:
+            continue
+
+        new_groups = [group[:] for group in best_groups]
+        index_i = new_groups[i].index(student_i)
+        index_j = new_groups[j].index(student_j)
+        new_groups[i][index_i], new_groups[j][index_j] = new_groups[j][index_j], new_groups[i][index_i]
+
+        candidate_fitness = _grouping_fitness(new_groups)
+        if candidate_fitness > best_fitness:
+            best_groups = new_groups
+            best_fitness = candidate_fitness
+
+    return best_groups
+
+
+def generate_dynamic_groups(
+    students: List[Student],
+    group_size: int,
+    use_genetic: bool = False,
+) -> List[List[Student]]:
+    if group_size < 3:
+        raise ValueError("group_size must be at least 3")
+
+    normalized_students = [_normalize_student(student) for student in students]
+    total_students = len(normalized_students)
+    if total_students == 0:
+        return []
+
+    group_count = max(1, (total_students + group_size - 1) // group_size)
+    buckets = _population_by_domain_and_level(normalized_students)
+
+    groups = _build_base_groups(buckets, group_count, group_size)
+    groups = _fill_groups(groups, buckets, group_size)
+
+    if use_genetic:
+        groups = _local_optimize_groups(groups)
+
+    return groups

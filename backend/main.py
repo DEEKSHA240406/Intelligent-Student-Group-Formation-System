@@ -18,9 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pymongo import MongoClient
 try:
-    from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
+    from backend.domain_utils import DEFAULT_DOMAIN, VALID_DOMAINS, normalize_domain, find_test_for_domain
+    from backend.grouping import random_grouping, round_robin_grouping, genetic_grouping, generate_dynamic_groups, metrics_for_groups
 except ModuleNotFoundError:
-    from grouping import random_grouping, round_robin_grouping, genetic_grouping, metrics_for_groups
+    from domain_utils import DEFAULT_DOMAIN, VALID_DOMAINS, normalize_domain, find_test_for_domain
+    from grouping import random_grouping, round_robin_grouping, genetic_grouping, generate_dynamic_groups, metrics_for_groups
 
 # Load .env from the backend directory
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -85,7 +87,6 @@ def sanitize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
     if out.get("groupId") is not None:
         out["groupId"] = str(out["groupId"])
     return out
-
 
 def create_token(user: Dict[str, Any]) -> str:
     payload = {
@@ -331,32 +332,75 @@ def seed_defaults() -> None:
                 "updatedAt": datetime.now(timezone.utc),
             }
         )
-    if not tests.find_one({}):
-        tests.insert_one(
-            {
-                "title": "Initial Skill Assessment",
-                "content": {
-                    "mcqs": [
-                        {"id": 1, "question": "What is the time complexity of binary search?", "options": ["O(n)", "O(log n)", "O(n^2)", "O(1)"], "correctAnswer": "O(log n)", "marks": 1},
-                        {"id": 2, "question": "Which data structure uses LIFO?", "options": ["Queue", "Stack", "Linked List", "Tree"], "correctAnswer": "Stack", "marks": 1},
-                        {"id": 3, "question": "What does SQL stand for?", "options": ["Structured Query Language", "Simple Query Language", "Strong Query Language", "Sequential Query Language"], "correctAnswer": "Structured Query Language", "marks": 1},
-                        {"id": 4, "question": "Which of these is NOT a primitive data type in JavaScript?", "options": ["String", "Number", "Boolean", "Object"], "correctAnswer": "Object", "marks": 1},
-                        {"id": 5, "question": "What is the purpose of 'git clone'?", "options": ["To create a new branch", "To copy a repository", "To delete a repository", "To merge branches"], "correctAnswer": "To copy a repository", "marks": 1},
-                        {"id": 6, "question": "Which sorting algorithm has the best average case time complexity?", "options": ["Bubble Sort", "Quick Sort", "Insertion Sort", "Selection Sort"], "correctAnswer": "Quick Sort", "marks": 1},
-                        {"id": 7, "question": "What does 'DOM' stand for in web development?", "options": ["Document Object Model", "Data Object Model", "Dynamic Object Model", "Document Oriented Model"], "correctAnswer": "Document Object Model", "marks": 1},
-                        {"id": 8, "question": "Which HTTP method is used to retrieve data from a server?", "options": ["POST", "PUT", "GET", "DELETE"], "correctAnswer": "GET", "marks": 1},
-                        {"id": 9, "question": "What is the output of 'console.log(typeof null)' in JavaScript?", "options": ["null", "undefined", "object", "boolean"], "correctAnswer": "object", "marks": 1},
-                        {"id": 10, "question": "Which of the following is NOT a valid CSS selector?", "options": [".class", "#id", "*element", "@media"], "correctAnswer": "@media", "marks": 1},
-                    ],
-                    "coding": [
-                        {"id": 1, "question": "Get two values from users and add them and store it in third variable and print the value of sum", "testCases": [{"input": "5\n3", "expectedOutput": "8"}, {"input": "10\n15", "expectedOutput": "25"}, {"input": "-2\n7", "expectedOutput": "5"}], "marks": 5},
-                        {"id": 2, "question": "Get two values from users and sub them and store it in third variable and print the value of sum", "testCases": [{"input": "10\n3", "expectedOutput": "7"}, {"input": "5\n8", "expectedOutput": "-3"}, {"input": "0\n0", "expectedOutput": "0"}], "marks": 5},
-                    ],
-                },
-                "createdAt": datetime.now(timezone.utc),
-                "updatedAt": datetime.now(timezone.utc),
-            }
+    default_tests = [
+        {
+            "title": "Frontend Skill Assessment",
+            "domain": "frontend",
+            "content": {
+                "mcqs": [
+                    {"id": 1, "question": "Which HTML element creates a hyperlink?", "options": ["<div>", "<span>", "<a>", "<link>"], "correctAnswer": "<a>", "marks": 1},
+                    {"id": 2, "question": "Which CSS property changes text color?", "options": ["background", "color", "font-size", "border"], "correctAnswer": "color", "marks": 1},
+                    {"id": 3, "question": "What does JSX stand for?", "options": ["JavaScript XML", "JavaScript Xcode", "JavaScript Execute", "JavaScript Xtra"], "correctAnswer": "JavaScript XML", "marks": 1},
+                    {"id": 4, "question": "Which React attribute binds a click event?", "options": ["onClick", "click", "handleClick", "bindClick"], "correctAnswer": "onClick", "marks": 1},
+                    {"id": 5, "question": "Which framework uses utility classes such as 'flex' and 'text-center'?", "options": ["Bootstrap", "Tailwind", "Foundation", "Bulma"], "correctAnswer": "Tailwind", "marks": 1},
+                ],
+                "coding": [
+                    {"id": 1, "question": "Build a UI label printer", "description": "Write code that reads a label from prompt and prints 'Button: <label>'.", "language": "js", "testCases": [{"input": "Submit", "expectedOutput": "Button: Submit", "marks": 5}, {"input": "Login", "expectedOutput": "Button: Login", "marks": 5}], "marks": 10},
+                ],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "title": "Backend Skill Assessment",
+            "domain": "backend",
+            "content": {
+                "mcqs": [
+                    {"id": 1, "question": "Which HTTP method updates a resource?", "options": ["GET", "POST", "PUT", "DELETE"], "correctAnswer": "PUT", "marks": 1},
+                    {"id": 2, "question": "What is an API used for?", "options": ["Render UI", "Store files", "Expose functionality", "Compress data"], "correctAnswer": "Expose functionality", "marks": 1},
+                    {"id": 3, "question": "Which runtime is commonly used for JavaScript backend?", "options": ["React", "Node.js", "Angular", "Vue"], "correctAnswer": "Node.js", "marks": 1},
+                    {"id": 4, "question": "What does REST stand for?", "options": ["Representational State Transfer", "Rapid Service Transfer", "Resource State Transfer", "Remote Service Transaction"], "correctAnswer": "Representational State Transfer", "marks": 1},
+                    {"id": 5, "question": "What does CRUD stand for?", "options": ["Create, Read, Update, Delete", "Compile, Run, Upload, Download", "Copy, Rename, Undo, Delete", "Connect, Read, Update, Disconnect"], "correctAnswer": "Create, Read, Update, Delete", "marks": 1},
+                ],
+                "coding": [
+                    {"id": 1, "question": "Backend sum function", "description": "Write JavaScript code that reads two numbers and prints their sum.", "language": "js", "testCases": [{"input": "4\n6", "expectedOutput": "10", "marks": 5}, {"input": "-3\n7", "expectedOutput": "4", "marks": 5}], "marks": 10},
+                ],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "title": "Database Skill Assessment",
+            "domain": "database",
+            "content": {
+                "mcqs": [
+                    {"id": 1, "question": "Which SQL command retrieves data?", "options": ["SELECT", "INSERT", "UPDATE", "DELETE"], "correctAnswer": "SELECT", "marks": 1},
+                    {"id": 2, "question": "Which clause filters rows?", "options": ["ORDER BY", "GROUP BY", "WHERE", "HAVING"], "correctAnswer": "WHERE", "marks": 1},
+                    {"id": 3, "question": "Which statement adds a record?", "options": ["INSERT INTO", "CREATE TABLE", "ALTER TABLE", "DROP TABLE"], "correctAnswer": "INSERT INTO", "marks": 1},
+                    {"id": 4, "question": "Which keyword sorts results?", "options": ["SORT BY", "ORDER BY", "GROUP BY", "SELECT"], "correctAnswer": "ORDER BY", "marks": 1},
+                    {"id": 5, "question": "Which command deletes a table?", "options": ["DELETE TABLE", "DROP TABLE", "REMOVE TABLE", "ERASE TABLE"], "correctAnswer": "DROP TABLE", "marks": 1},
+                ],
+                "coding": [
+                    {"id": 1, "question": "SQL query for users older than 30", "description": "Write a SQL query selecting all columns from users where age is greater than 30.", "language": "sql", "testCases": [{"expectedOutput": "SELECT * FROM users WHERE age > 30;", "marks": 10}], "marks": 10},
+                ],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        }
+    ]
+
+    tests.delete_many({"domain": {"$in": [None, ""]}})
+    for test_doc in default_tests:
+        tests.replace_one(
+            {"domain": test_doc["domain"]},
+            test_doc,
+            upsert=True,
         )
+
+    users.update_many(
+        {"role": "student", "$or": [{"domain": None}, {"domain": ""}]},
+        {"$set": {"domain": DEFAULT_DOMAIN}},
+    )
 
 
 seed_defaults()
@@ -409,6 +453,7 @@ async def signup(payload: SignupPayload):
 @app.post("/api/admin/students")
 async def add_student(body: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_admin_user)):
     try:
+        domain_value = normalize_domain(body.get("domain", "frontend"))
         users.insert_one(
             {
                 "name": body.get("name"),
@@ -417,6 +462,7 @@ async def add_student(body: Dict[str, Any], current_user: Dict[str, Any] = Depen
                 "role": "student",
                 "cgpa": float(body.get("cgpa")) if body.get("cgpa") is not None else None,
                 "department": body.get("department"),
+                "domain": domain_value,
                 "gender": body.get("gender"),
                 "testScore": 0,
                 "tier": "Pending",
@@ -441,11 +487,13 @@ async def update_student(student_id: str, body: Dict[str, Any], current_user: Di
     student_oid = oid(student_id)
     if not student_oid:
         raise HTTPException(status_code=400, detail="Invalid student ID")
+    domain_value = normalize_domain(body.get("domain", "frontend"))
     patch: Dict[str, Any] = {
         "name": body.get("name"),
         "email": str(body.get("email", "")).lower(),
         "cgpa": float(body.get("cgpa")) if body.get("cgpa") is not None else None,
         "department": body.get("department"),
+        "domain": domain_value,
         "gender": body.get("gender"),
         "updatedAt": datetime.now(timezone.utc),
     }
@@ -486,9 +534,20 @@ async def delete_student(student_id: str, current_user: Dict[str, Any] = Depends
 
 @app.get("/api/admin/test")
 async def get_test(authorization: Optional[str] = Header(default=None)):
-    _ = get_current_user(authorization)
-    test_doc = tests.find_one(sort=[("createdAt", 1)])
-    return doc_to_json(test_doc) if test_doc else None
+    user = get_current_user(authorization)
+    test_doc = find_test_for_domain(tests, user.get("domain"))
+    if not test_doc:
+        raise HTTPException(status_code=404, detail=f"No test found for domain '{normalize_domain(user.get('domain'))}'.")
+    return doc_to_json(test_doc)
+
+
+@app.get("/api/student/test")
+async def get_student_test(authorization: Optional[str] = Header(default=None)):
+    user = get_current_user(authorization)
+    test_doc = find_test_for_domain(tests, user.get("domain"))
+    if not test_doc:
+        raise HTTPException(status_code=404, detail=f"No test found for domain '{normalize_domain(user.get('domain'))}'.")
+    return doc_to_json(test_doc)
 
 
 @app.post("/api/execute-code")
@@ -507,19 +566,27 @@ async def run_test_cases(body: Dict[str, Any], authorization: Optional[str] = He
     _ = get_current_user(authorization)
     code = str(body.get("code", ""))
     test_cases = body.get("testCases", [])
+    language = str(body.get("language", "js")).lower()
     results = []
     passed_count = 0
+    total_score = 0
+
     for tc in test_cases:
+        expected = str(tc.get("expectedOutput", "")).strip()
         try:
-            actual = execute_js(code, str(tc.get("input", ""))).strip()
-            expected = str(tc.get("expectedOutput", "")).strip()
-            passed = actual == expected
+            if language == "sql":
+                actual = code.strip()
+                passed = actual.lower() == expected.lower()
+            else:
+                actual = execute_js(code, str(tc.get("input", ""))).strip()
+                passed = actual == expected
             if passed:
                 passed_count += 1
+                total_score += int(tc.get("marks", 1))
             results.append({"input": tc.get("input", ""), "expected": expected, "actual": actual, "passed": passed})
         except Exception as exc:
-            results.append({"input": tc.get("input", ""), "expected": tc.get("expectedOutput", ""), "actual": "", "passed": False, "error": str(exc)})
-    return {"success": True, "results": results, "passedCount": passed_count, "totalCount": len(test_cases), "score": passed_count * 5}
+            results.append({"input": tc.get("input", ""), "expected": expected, "actual": "", "passed": False, "error": str(exc)})
+    return {"success": True, "results": results, "passedCount": passed_count, "totalCount": len(test_cases), "score": total_score}
 
 
 @app.get("/api/student/profile")
@@ -531,13 +598,15 @@ async def student_profile(authorization: Optional[str] = Header(default=None)):
 async def submit_test(body: Dict[str, Any], authorization: Optional[str] = Header(default=None)):
     user = get_current_user(authorization)
     score = int(body.get("score", 0))
+    max_score = int(body.get("maxScore", 40)) if body.get("maxScore") is not None else 40
+    percentage = score / max_score if max_score > 0 else 0.0
     tier = "Low"
-    if score >= 30:
+    if percentage >= 0.75:
         tier = "Excellent"
-    elif score >= 20:
+    elif percentage >= 0.5:
         tier = "Good"
     users.update_one({"_id": user["_id"]}, {"$set": {"testScore": score, "testStatus": "Completed", "tier": tier}})
-    return {"success": True}
+    return {"success": True, "tier": tier}
 
 
 @app.post("/api/admin/generate-groups")
@@ -555,6 +624,14 @@ async def generate_groups(body: Dict[str, Any], current_user: Dict[str, Any] = D
     elif method == "round_robin" or method == "round-robin":
         grouped = round_robin_grouping(student_docs, group_size)
         method_used = "round_robin"
+        extra_metrics = metrics_for_groups(grouped)
+    elif method == "dynamic" or method == "dynamic_greedy":
+        grouped = generate_dynamic_groups(student_docs, group_size, use_genetic=False)
+        method_used = "dynamic"
+        extra_metrics = metrics_for_groups(grouped)
+    elif method == "dynamic_genetic":
+        grouped = generate_dynamic_groups(student_docs, group_size, use_genetic=True)
+        method_used = "dynamic_genetic"
         extra_metrics = metrics_for_groups(grouped)
     else:
         grouped, genetics = genetic_grouping(student_docs, group_size)
@@ -593,13 +670,19 @@ async def compare_grouping(body: Dict[str, Any], current_user: Dict[str, Any] = 
         raise HTTPException(status_code=400, detail="Not enough students to compare")
 
     report = []
-    for method_name in ["random", "round_robin", "genetic"]:
+    for method_name in ["random", "round_robin", "genetic", "dynamic", "dynamic_genetic"]:
         start = perf_counter()
         if method_name == "random":
             grouped = random_grouping(student_docs, group_size)
             method_metrics = metrics_for_groups(grouped)
         elif method_name == "round_robin":
             grouped = round_robin_grouping(student_docs, group_size)
+            method_metrics = metrics_for_groups(grouped)
+        elif method_name == "dynamic":
+            grouped = generate_dynamic_groups(student_docs, group_size, use_genetic=False)
+            method_metrics = metrics_for_groups(grouped)
+        elif method_name == "dynamic_genetic":
+            grouped = generate_dynamic_groups(student_docs, group_size, use_genetic=True)
             method_metrics = metrics_for_groups(grouped)
         else:
             grouped, genetics = genetic_grouping(student_docs, group_size)
